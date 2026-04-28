@@ -54,7 +54,12 @@ document.addEventListener('DOMContentLoaded', () => {
     Settings.load();
     modal.classList.add('open');
   });
-  btnClose.addEventListener('click', () => modal.classList.remove('open'));
-  modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+  btnClose.addEventListener('click', () => { Settings.save(); modal.classList.remove('open'); });
+  modal.addEventListener('click', e => { if (e.target === modal) { Settings.save(); modal.classList.remove('open'); } });
   btnSave.addEventListener('click', () => Settings.save());
+
+  // Autosave on every keystroke so keys are never lost
+  ['keyGemini','keyJustTCG','keyGoogleClient','keySheetId'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => Settings.save());
+  });
 });
