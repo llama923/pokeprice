@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PokePrice — Card Collection Valuator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-pk">POKE</span><span class="logo-price">PRICE</span>
+        <span class="logo-tag">Collection Valuator</span>
+      </div>
+      <button class="btn-settings" id="btnOpenSettings" title="API Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+        Settings
+      </button>
+    </div>
+  </header>
+
+  <!-- SETTINGS MODAL -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>API Settings</h2>
+        <button class="modal-close" id="btnCloseSettings">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-note">Your keys are stored only in your browser's localStorage — never sent anywhere except the respective API endpoints.</p>
+
+        <div class="field-group">
+          <label>Gemini API Key</label>
+          <input type="password" id="keyGemini" placeholder="AIza..." autocomplete="off" />
+          <span class="field-hint">Get it at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a></span>
+        </div>
+
+        <div class="field-group">
+          <label>JustTCG API Key</label>
+          <input type="password" id="keyJustTCG" placeholder="your-justtcg-key" autocomplete="off" />
+          <span class="field-hint">Get it at <a href="https://justtcg.com" target="_blank">justtcg.com</a> — free tier available</span>
+        </div>
+
+        <div class="field-group">
+          <label>Google OAuth Client ID</label>
+          <input type="text" id="keyGoogleClient" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" />
+          <span class="field-hint">Create at <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> — set authorized origin to your GitHub Pages URL</span>
+        </div>
+
+        <div class="field-group">
+          <label>Target Google Sheet ID</label>
+          <input type="text" id="keySheetId" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" autocomplete="off" />
+          <span class="field-hint">The long ID in your Google Sheet's URL</span>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-primary" id="btnSaveSettings">Save Keys</button>
+          <span class="save-confirm" id="saveConfirm">✓ Saved</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <main class="app-container">
+
+    <!-- STEP 1: Upload -->
+    <section class="step-card" id="stepUpload">
+      <div class="step-label">Step 01</div>
+      <h2 class="step-title">Upload Collection Photos</h2>
+      <p class="step-desc">Drop photos of your Pokémon card collection. Gemini Vision will identify every card name automatically.</p>
+
+      <div class="upload-zone" id="uploadZone">
+        <div class="upload-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="upload-text">Drop images here or <span class="upload-link">browse</span></div>
+        <div class="upload-sub">JPG, PNG, WEBP — multiple files supported</div>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden />
+      </div>
+
+      <div class="preview-grid" id="previewGrid"></div>
+
+      <button class="btn-primary btn-full" id="btnAnalyze" disabled>
+        <span class="btn-text">Analyze with Gemini</span>
+        <span class="btn-spinner" hidden>
+          <svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          Analyzing...
+        </span>
+      </button>
+    </section>
+
+    <!-- STEP 2: Review Cards -->
+    <section class="step-card" id="stepReview" hidden>
+      <div class="step-label">Step 02</div>
+      <h2 class="step-title">Review &amp; Set Conditions</h2>
+      <p class="step-desc">Gemini identified the cards below. Assign a condition to each, then fetch prices.</p>
+
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <span id="cardCount">0 cards identified</span>
+        </div>
+        <div class="toolbar-right">
+          <select id="bulkCondition">
+            <option value="">Set all conditions...</option>
+            <option value="NM">Near Mint (NM)</option>
+            <option value="LP">Lightly Played (LP)</option>
+            <option value="MP">Moderately Played (MP)</option>
+            <option value="HP">Heavily Played (HP)</option>
+            <option value="DMG">Damaged (DMG)</option>
+          </select>
+          <button class="btn-secondary" id="btnAddCard">+ Add Card</button>
+        </div>
+      </div>
+
+      <div class="cards-table-wrap">
+        <table class="cards-table" id="cardsTable">
+          <thead>
+            <tr>
+              <th>Card Name</th>
+              <th>Set / Number</th>
+              <th>Condition</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="cardsTableBody"></tbody>
+        </table>
+      </div>
+
+      <button class="btn-primary btn-full" id="btnFetchPrices">
+        <span class="btn-text">Fetch Prices via JustTCG</span>
+        <span class="btn-spinner" hidden>
+          <svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          Fetching prices...
+        </span>
+      </button>
+    </section>
+
+    <!-- STEP 3: Results -->
+    <section class="step-card" id="stepResults" hidden>
+      <div class="step-label">Step 03</div>
+      <h2 class="step-title">Valuation Results</h2>
+
+      <div class="results-summary" id="resultsSummary"></div>
+
+      <div class="cards-table-wrap">
+        <table class="cards-table results-table" id="resultsTable">
+          <thead>
+            <tr>
+              <th>Card Name</th>
+              <th>Set</th>
+              <th>Condition</th>
+              <th>Market Price</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody id="resultsTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="results-actions">
+        <button class="btn-primary" id="btnExportSheets">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          Export to Google Sheets
+        </button>
+        <button class="btn-secondary" id="btnExportCSV">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download CSV
+        </button>
+        <button class="btn-ghost" id="btnStartOver">Start Over</button>
+      </div>
+    </section>
+
+    <!-- LOG -->
+    <div class="log-panel" id="logPanel">
+      <div class="log-header" id="logToggle">
+        <span>Activity Log</span>
+        <svg class="log-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+
+  </main>
+
+  <!-- ADD CARD MODAL -->
+  <div class="modal-overlay" id="addCardModal">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Add Card Manually</h2>
+        <button class="modal-close" id="btnCloseAddCard">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-group">
+          <label>Card Name</label>
+          <input type="text" id="manualCardName" placeholder="e.g. Charizard VMAX" />
+        </div>
+        <div class="field-group">
+          <label>Set / Number (optional)</label>
+          <input type="text" id="manualCardSet" placeholder="e.g. Darkness Ablaze 020/189" />
+        </div>
+        <div class="field-group">
+          <label>Condition</label>
+          <select id="manualCondition">
+            <option value="NM">Near Mint (NM)</option>
+            <option value="LP">Lightly Played (LP)</option>
+            <option value="MP">Moderately Played (MP)</option>
+            <option value="HP">Heavily Played (HP)</option>
+            <option value="DMG">Damaged (DMG)</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-primary" id="btnConfirmAddCard">Add Card</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script src="js/settings.js"></script>
+  <script src="js/gemini.js"></script>
+  <script src="js/justtcg.js"></script>
+  <script src="js/sheets.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
