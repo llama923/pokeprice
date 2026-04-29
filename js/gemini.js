@@ -1,7 +1,7 @@
 // gemini.js — Gemini Vision API for Pokémon card identification
 
 const Gemini = (() => {
-  const MODEL = 'gemini-2.0-flash';
+  const MODEL = 'gemini-1.5-pro';
   const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
   const PROMPT = `You are an expert Pokémon Trading Card Game identifier with encyclopedic knowledge of every Pokémon TCG set ever released.
