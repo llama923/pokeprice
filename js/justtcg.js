@@ -1,10 +1,11 @@
 // justtcg.js — JustTCG API for TCGPlayer market prices
 // Docs: https://justtcg.com/docs
+// Actual endpoint: GET /v1/cards?q=CARDNAME&game=pokemon
 
 const JustTCG = (() => {
   const BASE_URL = 'https://poke-price-proxy.c59374758.workers.dev/v1';
 
-  // JustTCG condition codes mapping
+  // Map our condition codes to JustTCG condition names
   const CONDITION_MAP = {
     'NM':  'near_mint',
     'LP':  'lightly_played',
@@ -17,118 +18,91 @@ const JustTCG = (() => {
     const apiKey = Settings.get('justTCG');
     if (!apiKey) throw new Error('JustTCG API key not set.');
 
-    const conditionCode = CONDITION_MAP[condition] || 'near_mint';
+    const conditionKey = CONDITION_MAP[condition] || 'near_mint';
 
-    // Build search query — include set info if available for accuracy
-    const query = setInfo
-      ? `${cardName} ${setInfo}`.trim()
-      : cardName;
-
-    // Step 1: Search for the card
-    const searchParams = new URLSearchParams({
-      q: query,
+    // Build search query
+    const params = new URLSearchParams({
+      q: cardName,
       game: 'pokemon',
       limit: '5'
     });
 
-    const searchResponse = await fetch(`${BASE_URL}/products/search?${searchParams}`, {
+    // Add set filter if available
+    if (setInfo) {
+      // Extract just the set name (drop card number like "115/114")
+      const setName = setInfo.replace(/\s*\d+\/\d+$/, '').trim();
+      if (setName) params.set('set', setName);
+    }
+
+    const response = await fetch(`${BASE_URL}/cards?${params}`, {
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'X-API-Key': apiKey,
         'Content-Type': 'application/json'
       }
     });
 
-    if (!searchResponse.ok) {
-      const err = await searchResponse.json().catch(() => ({}));
-      throw new Error(`JustTCG search error ${searchResponse.status}: ${err?.message || searchResponse.statusText}`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(`JustTCG error ${response.status}: ${err?.message || response.statusText}`);
     }
 
-    const searchData = await searchResponse.json();
-    const products = searchData?.data || searchData?.results || searchData?.products || [];
+    const data = await response.json();
 
-    if (!products.length) {
-      return { price: null, url: null, source: 'Not found', productId: null };
+    // Cards are in data.data array
+    const cards = data?.data || data?.cards || data?.results || [];
+
+    if (!cards.length) {
+      return { price: null, url: null, source: 'Not found' };
     }
 
-    // Step 2: Pick best match (first result is usually most relevant)
-    const product = products[0];
-    const productId = product.id || product.productId;
+    // Pick the best matching card (first result)
+    const card = cards[0];
 
-    // Step 3: Fetch pricing for that specific product + condition
-    const priceResponse = await fetch(`${BASE_URL}/products/${productId}/prices`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!priceResponse.ok) {
-      // If price endpoint fails, try to use price from search result
-      const fallbackPrice = extractPriceFromProduct(product, conditionCode);
-      return {
-        price: fallbackPrice,
-        url: product.url || buildTCGPlayerUrl(cardName),
-        source: 'TCGPlayer (via search)',
-        productId
-      };
-    }
-
-    const priceData = await priceResponse.json();
-    const price = extractPrice(priceData, conditionCode);
+    // Extract price for our condition from variants
+    const price = extractPrice(card, conditionKey);
+    const url = card.url || buildTCGPlayerUrl(cardName);
 
     return {
       price,
-      url: product.url || priceData.url || buildTCGPlayerUrl(cardName),
-      source: 'TCGPlayer Market Price',
-      productId,
-      productName: product.name || cardName
+      url,
+      source: price ? 'TCGPlayer via JustTCG' : 'Not found',
+      productName: card.name || cardName
     };
   }
 
-  function extractPrice(priceData, conditionCode) {
-    // JustTCG returns various price structures — handle multiple formats
-    const prices = priceData?.data || priceData?.prices || priceData;
+  function extractPrice(card, conditionKey) {
+    // JustTCG structure: card.variants[] each has condition and prices
+    const variants = card?.variants || card?.prices || [];
 
-    if (!prices) return null;
+    if (Array.isArray(variants)) {
+      // Find variant matching our condition
+      const match = variants.find(v => {
+        const c = (v.condition || v.name || '').toLowerCase().replace(/\s+/g, '_');
+        return c === conditionKey || c.includes(conditionKey);
+      });
 
-    // Format 1: prices keyed by condition
-    if (prices[conditionCode]) {
-      return prices[conditionCode]?.market || prices[conditionCode]?.mid || prices[conditionCode];
+      if (match) {
+        return match.market_price ?? match.marketPrice ?? match.price ?? match.mid_price ?? null;
+      }
+
+      // Fallback: try first variant's price
+      if (variants[0]) {
+        return variants[0].market_price ?? variants[0].price ?? null;
+      }
     }
 
-    // Format 2: array of price objects
-    if (Array.isArray(prices)) {
-      const match = prices.find(p =>
-        p.condition === conditionCode ||
-        p.condition?.toLowerCase().replace(' ', '_') === conditionCode
-      );
-      if (match) return match.market_price || match.marketPrice || match.price;
-    }
+    // Flat price fields on the card itself
+    if (card?.market_price != null) return card.market_price;
+    if (card?.price != null) return card.price;
 
-    // Format 3: flat market price
-    if (typeof prices.market_price === 'number') return prices.market_price;
-    if (typeof prices.marketPrice === 'number') return prices.marketPrice;
-
-    return null;
-  }
-
-  function extractPriceFromProduct(product, conditionCode) {
-    // Try to get price from the search result product object directly
-    if (product.prices?.[conditionCode]) {
-      return product.prices[conditionCode]?.market || product.prices[conditionCode];
-    }
-    if (product.market_price) return product.market_price;
-    if (product.price) return product.price;
     return null;
   }
 
   function buildTCGPlayerUrl(cardName) {
-    const encoded = encodeURIComponent(cardName);
-    return `https://www.tcgplayer.com/search/pokemon/product?q=${encoded}&view=grid`;
+    return `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(cardName)}&view=grid`;
   }
 
   async function getPriceBatch(cards) {
-    // Process with small delay between requests to respect rate limits
     const results = [];
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i];
@@ -138,9 +112,8 @@ const JustTCG = (() => {
       } catch (err) {
         results.push({ ...card, price: null, url: null, source: 'Error', error: err.message });
       }
-      // Small delay between requests
       if (i < cards.length - 1) {
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 250));
       }
     }
     return results;
