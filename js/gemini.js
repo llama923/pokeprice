@@ -4,32 +4,38 @@ const Gemini = (() => {
   const MODEL = 'gemini-2.5-flash';
   const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-  const PROMPT = `You are a highly precise Pokémon TCG Data Extraction API. Your goal is to identify cards for TCGplayer integration.
+  const PROMPT = `You are a Pokémon TCG Forensic API. Identify every card in this image for TCGplayer.
 
-CRITICAL RULE: You must perform a multi-step visual audit for EVERY card before generating its data. Do not guess based on artwork alone.
+### LOGIC GATE 1: BORDER IDENTIFICATION (The Era Key)
+- YELLOW Border: Vintage (1999) through Sword & Shield (2022).
+- SILVER/GREY Border: Scarlet & Violet (2023) to Present.
+- GOLD Border: Indicates a Secret Rare/Hyper Rare in almost any era.
 
-STEP 1: VISUAL ANALYSIS
-- Locate the card name and set symbol.
-- Identify the Collector Number (bottom left/right).
-- Audit for "Secret Rare" markers: Does the card have a gold border? Is it a "Rainbow/Hyper" rare? Is the first number higher than the second (e.g., 115/114)?
-- Audit for "Full Art": Does the character artwork break the frame and cover the entire card?
+### LOGIC GATE 2: THE NUMBER & SYMBOL AUDIT
+1. Locate the number (bottom left or right).
+2. Format Check:
+   - XXX/YYY: If XXX > YYY, label as [Secret Rare].
+   - Letters in number: e.g., "SV045" (Promo) or "GG12" (Galarian Gallery).
+3. Rarity Symbol Check:
+   - 1 Gold Star = Illustration Rare.
+   - 2 Gold Stars = Special Illustration Rare.
+   - 3 Gold Stars = Hyper Rare.
 
-STEP 2: DATA CROSS-REFERENCE
-- If the card is Volcanion EX and you see a gold/dual-type border, it MUST be 115/114 (Steam Siege).
-- If the card is M Manectric EX and has a gold border/Japanese text in the art, it MUST be 120/119 (Phantom Forces).
-- Match the visual version (Full Art vs Regular) to the correct TCGplayer set list.
+### LOGIC GATE 3: ART STYLE CLASSIFICATION
+- REVERSE HOLO: Shiny background, non-shiny character art.
+- FULL ART: Art covers the whole card; character is usually on a solid/patterned color background.
+- ILLUSTRATION RARE (Alt Art): Art covers the whole card; features a full scene/environment.
 
-OUTPUT FORMAT:
-Return a JSON array where each object strictly follows this schema.
-Include your reasoning in the "internal_audit" field to ensure the numbers match the visuals.
-
+### OUTPUT SCHEMA (JSON)
+Return ONLY a valid JSON array, no markdown, no backticks:
 [
   {
-    "internal_audit": "Briefly describe the visual proof for the number (e.g., 'Gold border and dual-type confirmed, indicates Secret 115/114')",
-    "name": "Exact TCGplayer Name",
-    "set": "Full Set Name and collector number (e.g., Steam Siege 115/114)",
-    "rarity_variant": "Regular / Full Art / Secret Rare",
-    "tcgplayer_search": "Direct TCGplayer search string",
+    "name": "Name [Variant]",
+    "set": "Full Expansion Name and collector number (e.g., Steam Siege 115/114)",
+    "rarity_variant": "Regular / Reverse Holo / Full Art / Secret Rare / Illustration Rare / Hyper Rare",
+    "era_check": "Yellow Border (Legacy) or Silver Border (Modern)",
+    "internal_audit": "Why this number? (e.g., 'Full art texture seen, Silver border found')",
+    "tcgplayer_search": "Name Set Number",
     "confidence": "high/medium/low"
   }
 ]`;
@@ -39,7 +45,6 @@ Include your reasoning in the "internal_audit" field to ensure the numbers match
     topP: 1,
     topK: 1,
     maxOutputTokens: 4096,
-    responseMimeType: 'application/json',
   };
 
   async function identifyCards(imageFile) {
