@@ -154,10 +154,17 @@ const App = (() => {
         const cards = await Gemini.identifyCards(file);
         log(`  → Found ${cards.length} card(s)`, 'ok');
         cards.forEach(c => {
-          // Avoid exact duplicates from same batch
           const key = `${c.name}||${c.set}`;
           if (!identifiedCards.find(x => `${x.name}||${x.set}` === key)) {
-            identifiedCards.push({ ...c, rowId: crypto.randomUUID(), condition: 'NM' });
+            identifiedCards.push({
+              name: c.name || c.card_name || '',
+              set: c.set || c.set_name || '',
+              rarity: c.rarity_variant || '',
+              tcgplayer_search: c.tcgplayer_search || '',
+              confidence: c.confidence || 'medium',
+              rowId: crypto.randomUUID(),
+              condition: 'NM'
+            });
             totalFound++;
           }
         });

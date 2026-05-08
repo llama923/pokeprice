@@ -4,25 +4,34 @@ const Gemini = (() => {
   const MODEL = 'gemini-2.5-flash';
   const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-  const PROMPT = `You are an expert Pokémon Trading Card Game identifier. Your job is to visually recognize Pokémon cards from photos — like a reverse image search.
+  const PROMPT = `You are a master Pokémon TCG historian and appraiser. Your goal is to identify every card in the image for TCGPlayer listing purposes, regardless of era (Vintage, EX-era, Modern).
 
-When you see a card, identify it by its artwork, layout, and visual appearance. Then from your knowledge of that exact card, return its official metadata.
+For each card, perform these precise checks:
+1. Identify the Name, Set Symbol, and Collector Number.
+2. ERA CHECK (Vintage 1999-2002):
+   - Check for a "1st Edition" stamp (left side below art).
+   - If Base Set (no symbol): Check for "Shadowless" (no drop shadow on the right of the art box) vs "Unlimited" (drop shadow present).
+3. VARIANT CHECK:
+   - "Holo": Only the artwork is shiny.
+   - "Reverse Holo": The area around the art is shiny (note: EX-era reverse holos often have the set logo inside the art).
+   - "Full Art / Ultra Rare": The artwork covers the entire card.
+   - "Secret Rare": The first number is higher than the second (e.g., 115/114).
 
-For each card you identify:
-1. The EXACT official card name (e.g. "Charizard VMAX", "Scizor EX", "Professor's Research")
-2. The EXACT set name and card number from your knowledge of that specific card (e.g. "BREAKpoint 76/122"). Do NOT try to read text off the physical card in the image — use your knowledge of what card this visually is.
-3. A confidence score: high / medium / low
-
-Return ONLY a valid JSON array. No explanation, no markdown, no backticks. Example:
+Return ONLY a valid JSON array, no markdown, no backticks. Each object must use exactly this schema:
 [
-  {"name": "Scizor EX", "set": "BREAKpoint 76/122", "confidence": "high"},
-  {"name": "Volcanion EX", "set": "Steam Siege 107/114", "confidence": "high"},
-  {"name": "Professor's Research", "set": "Sword & Shield 178/202", "confidence": "medium"}
+  {
+    "name": "Exact Name + Variant (e.g., Charizard [Shadowless], Blastoise [1st Edition])",
+    "set": "Full Official Set Name + collector number (e.g., Base Set 4/102, BREAKpoint 76/122)",
+    "rarity_variant": "Holo / Reverse Holo / Non-Holo / 1st Edition / Shadowless / Secret Rare",
+    "tcgplayer_search": "Direct search string for TCGPlayer",
+    "confidence": "high / medium / low"
+  }
 ]
 
-If no cards are visible, return: []
-If a card is partially visible, include it with confidence "low".
-Be precise — "Charizard" and "Charizard VMAX" are completely different cards.`;
+Constraints:
+- Be extremely specific about Shadowless vs Unlimited for Base Set cards.
+- If the card has a 1st Edition stamp, it MUST be included in the name.
+- If no cards are visible, return: []`;
 
   async function identifyCards(imageFile) {
     const apiKey = Settings.get('gemini');
