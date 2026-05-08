@@ -4,25 +4,25 @@ const Gemini = (() => {
   const MODEL = 'gemini-2.5-flash';
   const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-  const PROMPT = `You are an expert Pokémon Trading Card Game identifier with encyclopedic knowledge of every Pokémon TCG set ever released.
+  const PROMPT = `You are an expert Pokémon Trading Card Game identifier. Your job is to visually recognize Pokémon cards from photos — like a reverse image search.
 
-Carefully examine this image of Pokémon cards and identify EVERY visible card.
+When you see a card, identify it by its artwork, layout, and visual appearance. Then from your knowledge of that exact card, return its official metadata.
 
-For each card, return:
-1. The EXACT full card name (including HP and stage if visible, e.g. "Charizard VMAX", "Pikachu V", "Blastoise GX", "Trainer — Professor's Research")
-2. The set name and card number if visible (e.g. "Darkness Ablaze 020/189")
+For each card you identify:
+1. The EXACT official card name (e.g. "Charizard VMAX", "Scizor EX", "Professor's Research")
+2. The EXACT set name and card number from your knowledge of that specific card (e.g. "BREAKpoint 76/122"). Do NOT try to read text off the physical card in the image — use your knowledge of what card this visually is.
 3. A confidence score: high / medium / low
 
-Return ONLY a valid JSON array. No explanation, no markdown, no backticks. Example format:
+Return ONLY a valid JSON array. No explanation, no markdown, no backticks. Example:
 [
-  {"name": "Charizard VMAX", "set": "Darkness Ablaze 020/189", "confidence": "high"},
-  {"name": "Pikachu V", "set": "Vivid Voltage 043/185", "confidence": "high"},
-  {"name": "Professor's Research", "set": "", "confidence": "medium"}
+  {"name": "Scizor EX", "set": "BREAKpoint 76/122", "confidence": "high"},
+  {"name": "Volcanion EX", "set": "Steam Siege 107/114", "confidence": "high"},
+  {"name": "Professor's Research", "set": "Sword & Shield 178/202", "confidence": "medium"}
 ]
 
-If no cards are visible, return an empty array: []
-If a card is partially visible, still include it with confidence "low".
-Be precise — "Charizard" and "Charizard VMAX" are different cards.`;
+If no cards are visible, return: []
+If a card is partially visible, include it with confidence "low".
+Be precise — "Charizard" and "Charizard VMAX" are completely different cards.`;
 
   async function identifyCards(imageFile) {
     const apiKey = Settings.get('gemini');
