@@ -4,38 +4,34 @@ const Gemini = (() => {
   const MODEL = 'gemini-2.5-flash';
   const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-  const PROMPT = `You are a Pokémon TCG Forensic API. Identify every card in this image for TCGplayer.
+  const PROMPT = `You are a Pokémon TCG Forensic Scanner. Your goal is to identify cards for TCGplayer with 100% data integrity.
 
-### LOGIC GATE 1: BORDER IDENTIFICATION (The Era Key)
-- YELLOW Border: Vintage (1999) through Sword & Shield (2022).
-- SILVER/GREY Border: Scarlet & Violet (2023) to Present.
-- GOLD Border: Indicates a Secret Rare/Hyper Rare in almost any era.
+### MANDATORY INSPECTION STEPS:
+1. IDENTIFY THE NAME & SET SYMBOL.
+2. DETECT "DUAL TYPE" (XY Era): Look at the name bar and the frame. Is it a solid color, or is it split into two colors (e.g., half red, half blue)?
+   - IF SPLIT/DUAL TYPE: This is a Secret Rare (e.g., Volcanion 115/114).
+   - IF SOLID COLOR: This is a standard Full Art (e.g., Volcanion 107/114).
+3. DETECT "GOLD BORDER" (All Eras):
+   - Is the outermost border gold? If YES, XXX must be > YYY (Secret Rare).
+4. READ THE NUMBER STRING:
+   - Zoom into the bottom left/right. Transcribe the digits EXACTLY as they appear. If the number is blurry, use the "Dual Type" or "Border" audit to decide.
 
-### LOGIC GATE 2: THE NUMBER & SYMBOL AUDIT
-1. Locate the number (bottom left or right).
-2. Format Check:
-   - XXX/YYY: If XXX > YYY, label as [Secret Rare].
-   - Letters in number: e.g., "SV045" (Promo) or "GG12" (Galarian Gallery).
-3. Rarity Symbol Check:
-   - 1 Gold Star = Illustration Rare.
-   - 2 Gold Stars = Special Illustration Rare.
-   - 3 Gold Stars = Hyper Rare.
+### ERA-SPECIFIC RULES:
+- VINTAGE: Check for "1st Edition" stamp and "Shadowless" art box (no drop shadow).
+- MODERN (Scarlet & Violet): Grey/Silver borders = Standard. Gold borders = Hyper Rare.
+- PROMO: If the number starts with a letter (XY, SM, SWSH, SVP), it is a Promo, not a set card.
 
-### LOGIC GATE 3: ART STYLE CLASSIFICATION
-- REVERSE HOLO: Shiny background, non-shiny character art.
-- FULL ART: Art covers the whole card; character is usually on a solid/patterned color background.
-- ILLUSTRATION RARE (Alt Art): Art covers the whole card; features a full scene/environment.
-
-### OUTPUT SCHEMA (JSON)
+### OUTPUT JSON FORMAT (Strict):
 Return ONLY a valid JSON array, no markdown, no backticks:
 [
   {
-    "name": "Name [Variant]",
+    "name": "Official TCGplayer Name",
     "set": "Full Expansion Name and collector number (e.g., Steam Siege 115/114)",
-    "rarity_variant": "Regular / Reverse Holo / Full Art / Secret Rare / Illustration Rare / Hyper Rare",
-    "era_check": "Yellow Border (Legacy) or Silver Border (Modern)",
-    "internal_audit": "Why this number? (e.g., 'Full art texture seen, Silver border found')",
+    "rarity_variant": "Regular / Full Art / Secret Rare / Hyper Rare / Promo",
+    "dual_type_detected": "true/false",
+    "border_color": "Silver/Gold/Yellow",
     "tcgplayer_search": "Name Set Number",
+    "internal_audit": "Explain the physical proof (e.g., Solid red name bar confirms 107/114, not the dual-type 115/114)",
     "confidence": "high/medium/low"
   }
 ]`;
