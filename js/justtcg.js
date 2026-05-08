@@ -20,9 +20,12 @@ const JustTCG = (() => {
 
     const conditionKey = CONDITION_MAP[condition] || 'near_mint';
 
+    // Strip HP info that Gemini adds e.g. "Volcanion EX (180 HP)" → "Volcanion EX"
+    const cleanName = cardName.replace(/\s*\(\d+\s*HP\)/gi, '').trim();
+
     // Build search query
     const params = new URLSearchParams({
-      q: cardName,
+      q: cleanName,
       game: 'pokemon',
       limit: '5'
     });
