@@ -71,31 +71,28 @@ const JustTCG = (() => {
   }
 
   function extractPrice(card, conditionKey) {
-    // JustTCG structure: card.variants[] each has condition and prices
-    const variants = card?.variants || card?.prices || [];
+    const variants = card?.variants || [];
+    if (!variants.length) return null;
 
-    if (Array.isArray(variants)) {
-      // Find variant matching our condition
-      const match = variants.find(v => {
-        const c = (v.condition || v.name || '').toLowerCase().replace(/\s+/g, '_');
-        return c === conditionKey || c.includes(conditionKey);
-      });
+    // conditionKey is e.g. "near_mint" — convert to "Near Mint" for matching
+    const conditionLabel = conditionKey
+      .split('_')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
 
-      if (match) {
-        return match.market_price ?? match.marketPrice ?? match.price ?? match.mid_price ?? null;
-      }
+    // Find variant matching condition (prefer standard/unlimited printing)
+    const matches = variants.filter(v => v.condition === conditionLabel);
 
-      // Fallback: try first variant's price
-      if (variants[0]) {
-        return variants[0].market_price ?? variants[0].price ?? null;
-      }
+    if (matches.length) {
+      // Prefer Unlimited Holofoil or Normal over 1st Edition (more common)
+      const preferred = matches.find(v =>
+        v.printing && (v.printing.includes('Unlimited') || v.printing.includes('Normal') || v.printing.includes('Regular'))
+      ) || matches[0];
+      return preferred.price ?? null;
     }
 
-    // Flat price fields on the card itself
-    if (card?.market_price != null) return card.market_price;
-    if (card?.price != null) return card.price;
-
-    return null;
+    // Fallback: return first variant's price
+    return variants[0]?.price ?? null;
   }
 
   function buildTCGPlayerUrl(cardName) {
