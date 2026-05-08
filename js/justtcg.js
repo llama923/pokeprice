@@ -2,7 +2,7 @@
 // Docs: https://justtcg.com/docs
 
 const JustTCG = (() => {
-  const BASE_URL = 'https://api.justtcg.com/v1';
+  const BASE_URL = 'https://poke-price-proxy.c59374758.workers.dev/v1';
 
   // JustTCG condition codes mapping
   const CONDITION_MAP = {
