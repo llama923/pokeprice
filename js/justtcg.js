@@ -51,8 +51,26 @@ const JustTCG = (() => {
       return { price: null, url: null, source: 'Not found' };
     }
 
-    // Pick the best matching card (first result)
-    const card = cards[0];
+    // Try to find the best match using set info
+    let card = cards[0];
+    if (setInfo) {
+      // Extract card number from set info e.g. "BREAKpoint 119/122" → "119"
+      const numberMatch = setInfo.match(/(\d+)\//);
+      const cardNumber = numberMatch ? numberMatch[1].replace(/^0+/, '') : null;
+
+      // Extract set name without number
+      const setName = setInfo.replace(/\s*\d+\/\d+$/, '').trim().toLowerCase();
+
+      // Find best match by set name or card number
+      const betterMatch = cards.find(c => {
+        const cSetName = (c.set_name || '').toLowerCase();
+        const cNumber = (c.number || '').replace(/^0+/, '').split('/')[0];
+        return (cardNumber && cNumber === cardNumber) ||
+               cSetName.includes(setName) ||
+               setName.includes(cSetName);
+      });
+      if (betterMatch) card = betterMatch;
+    }
 
     // Extract price for our condition from variants
     const price = extractPrice(card, conditionKey);
