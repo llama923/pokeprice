@@ -27,13 +27,6 @@ const JustTCG = (() => {
       limit: '5'
     });
 
-    // Add set filter if available
-    if (setInfo) {
-      // Extract just the set name (drop card number like "115/114")
-      const setName = setInfo.replace(/\s*\d+\/\d+$/, '').trim();
-      if (setName) params.set('set', setName);
-    }
-
     const response = await fetch(`${BASE_URL}/cards?${params}`, {
       headers: {
         'X-API-Key': apiKey,
