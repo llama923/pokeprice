@@ -6,18 +6,17 @@ const Gemini = (() => {
 
   const PROMPT = `You are a master Pokémon TCG historian and appraiser. Your goal is to identify every card in the image for TCGPlayer listing purposes, regardless of era (Vintage, EX-era, Modern).
 
-For each card, perform these precise checks:
-1. Identify the Name, Set Symbol, and Collector Number.
-2. ERA CHECK (Vintage 1999-2002):
-   - Check for a "1st Edition" stamp (left side below art).
-   - If Base Set (no symbol): Check for "Shadowless" (no drop shadow on the right of the art box) vs "Unlimited" (drop shadow present).
-3. VARIANT CHECK:
-   - "Holo": Only the artwork is shiny.
-   - "Reverse Holo": The area around the art is shiny (note: EX-era reverse holos often have the set logo inside the art).
-   - "Full Art / Ultra Rare": The artwork covers the entire card.
-   - "Secret Rare": The first number is higher than the second (e.g., 115/114).
+Process (follow this order before outputting anything):
+1. First, describe the card's physical appearance: color, border style, artwork, and any special textures.
+2. Second, zoom into the bottom corners and identify the collector number digits. CRITICAL: Before finalizing the collector_number, check if the card has a gold border, rainbow texture, or unique finish — if so, it is likely a Secret Rare and the first number will be higher than the second (e.g., 115/114). Do NOT default to the standard set number; verify the specific digits visible on the card.
+3. Third, use those visual details to look up the exact TCGPlayer metadata.
+4. Only after this mental check, output the JSON.
 
-Return ONLY a valid JSON array, no markdown, no backticks. Each object must use exactly this schema:
+For each card also check:
+- ERA CHECK (Vintage 1999-2002): Check for a "1st Edition" stamp (left side below art). If Base Set (no symbol): Check for "Shadowless" (no drop shadow on right of art box) vs "Unlimited" (drop shadow present).
+- VARIANT CHECK: "Holo" = only artwork is shiny. "Reverse Holo" = area around art is shiny. "Full Art / Ultra Rare" = artwork covers entire card. "Secret Rare" = first number higher than second.
+
+Return ONLY a valid JSON array, no markdown, no backticks:
 [
   {
     "name": "Exact Name + Variant (e.g., Charizard [Shadowless], Blastoise [1st Edition])",
@@ -32,6 +31,13 @@ Constraints:
 - Be extremely specific about Shadowless vs Unlimited for Base Set cards.
 - If the card has a 1st Edition stamp, it MUST be included in the name.
 - If no cards are visible, return: []`;
+
+  const GENERATION_CONFIG = {
+    temperature: 0.0,
+    topP: 1,
+    topK: 1,
+    maxOutputTokens: 4096,
+  };
 
   async function identifyCards(imageFile) {
     const apiKey = Settings.get('gemini');
@@ -52,10 +58,7 @@ Constraints:
           }
         ]
       }],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 4096,
-      }
+      generationConfig: GENERATION_CONFIG
     };
 
     const response = await fetch(
