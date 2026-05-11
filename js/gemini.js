@@ -1,10 +1,33 @@
-// gemini.js — Gemini Vision API for Pokémon card identification
+// gemini.js — Gemini Vision API: auto-detect cards, crop, then identify each one
 
 const Gemini = (() => {
   const MODEL = 'gemini-2.5-flash';
   const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-  const PROMPT = `You are a Pokémon TCG Forensic Scanner. Identify every card in this image for TCGPlayer with 100% accuracy.
+  const GENERATION_CONFIG = {
+    temperature: 0.0,
+    topP: 1,
+    topK: 1,
+    maxOutputTokens: 4096,
+  };
+
+  // ─── STEP 1 PROMPT: Detect card bounding boxes ───
+  const DETECT_PROMPT = `You are a card detection system. Look at this image and find every Pokémon card visible.
+
+For each card, return its bounding box as a fraction of the image dimensions (values between 0 and 1).
+
+Return ONLY a valid JSON array, no markdown, no backticks:
+[
+  { "card_index": 1, "x": 0.05, "y": 0.02, "width": 0.28, "height": 0.45 },
+  { "card_index": 2, "x": 0.36, "y": 0.02, "width": 0.28, "height": 0.45 }
+]
+
+Where x/y is the top-left corner of the card, and width/height are the card's dimensions — all as fractions of the full image size.
+If only one card is visible, return an array with one object.
+Be generous with the bounding box — include a small margin around each card.`;
+
+  // ─── STEP 2 PROMPT: Identify a single cropped card ───
+  const IDENTIFY_PROMPT = `You are a Pokémon TCG Forensic Scanner. Identify the single card in this image for TCGPlayer with 100% accuracy.
 
 ABSOLUTE RULES:
 - Your PRIMARY identification method is VISUAL — match the artwork, card style, and layout to your knowledge of TCGPlayer cards. The collector number is a CONFIRMATION tool, not the primary identifier.
@@ -48,43 +71,27 @@ STEP 5 — VINTAGE ERA CHECK (WOTC era only, 1999–2003)
 - Shadowless: No drop shadow on right side of art box. Base Set only.
 - Unlimited: Drop shadow visible on right of art box.
 
-OUTPUT — JSON array only, no markdown, no backticks:
-[
-  {
-    "name": "Official TCGPlayer card name",
-    "set": "Full set name and collector number (e.g., BREAKpoint 76/122)",
-    "rarity_variant": "Holo Rare / Reverse Holo / Full Art / Rainbow Rare / Secret Rare / Alternate Art / Illustration Rare / Special Illustration Rare / Hyper Rare / 1st Edition / Shadowless / Promo",
-    "number_read": "Exact digits read from card, or unreadable if blurry",
-    "internal_audit": "Describe the visual evidence used to identify this card — artwork, style, era, texture, frame color",
-    "tcgplayer_search": "Name Set Number",
-    "confidence": "high / medium / low"
-  }
-]`;
+Return ONLY a single JSON object, no array, no markdown, no backticks:
+{
+  "name": "Official TCGPlayer card name",
+  "set": "Full set name and collector number (e.g., BREAKpoint 76/122)",
+  "rarity_variant": "Holo Rare / Reverse Holo / Full Art / Rainbow Rare / Secret Rare / Alternate Art / Illustration Rare / Special Illustration Rare / Hyper Rare / 1st Edition / Shadowless / Promo",
+  "number_read": "Exact digits read from card, or unreadable if blurry",
+  "internal_audit": "Describe the visual evidence used to identify this card",
+  "tcgplayer_search": "Name Set Number",
+  "confidence": "high / medium / low"
+}`;
 
-  const GENERATION_CONFIG = {
-    temperature: 0.0,
-    topP: 1,
-    topK: 1,
-    maxOutputTokens: 4096,
-  };
-
-  async function identifyCards(imageFile) {
+  // ─── Call Gemini API ───
+  async function callGemini(prompt, base64, mimeType) {
     const apiKey = Settings.get('gemini');
     if (!apiKey) throw new Error('Gemini API key not set. Click Settings to add it.');
-
-    const base64 = await fileToBase64(imageFile);
-    const mimeType = imageFile.type || 'image/jpeg';
 
     const payload = {
       contents: [{
         parts: [
-          { text: PROMPT },
-          {
-            inline_data: {
-              mime_type: mimeType,
-              data: base64
-            }
-          }
+          { text: prompt },
+          { inline_data: { mime_type: mimeType, data: base64 } }
         ]
       }],
       generationConfig: GENERATION_CONFIG
@@ -105,27 +112,40 @@ OUTPUT — JSON array only, no markdown, no backticks:
     }
 
     const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-
-    // Clean up potential markdown fences
-    const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-
-    let cards;
-    try {
-      cards = JSON.parse(cleaned);
-    } catch {
-      // Try to extract JSON array from text
-      const match = cleaned.match(/\[[\s\S]*\]/);
-      if (match) {
-        cards = JSON.parse(match[0]);
-      } else {
-        throw new Error('Gemini returned unexpected format. Try again with a clearer image.');
-      }
-    }
-
-    return Array.isArray(cards) ? cards : [];
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
   }
 
+  // ─── Crop a card from an image using canvas ───
+  async function cropCard(imageFile, box) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(imageFile);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Add 2% padding around each card
+        const pad = 0.02;
+        const x = Math.max(0, box.x - pad) * img.width;
+        const y = Math.max(0, box.y - pad) * img.height;
+        const w = Math.min(1, box.width + pad * 2) * img.width;
+        const h = Math.min(1, box.height + pad * 2) * img.height;
+
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+
+        // Convert canvas to base64
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        resolve(dataUrl.split(',')[1]);
+      };
+      img.onerror = () => reject(new Error('Failed to load image for cropping'));
+      img.src = url;
+    });
+  }
+
+  // ─── Convert file to base64 ───
   async function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -133,6 +153,82 @@ OUTPUT — JSON array only, no markdown, no backticks:
       reader.onerror = () => reject(new Error('Failed to read image file'));
       reader.readAsDataURL(file);
     });
+  }
+
+  // ─── Main: detect cards, crop each one, identify each one ───
+  async function identifyCards(imageFile, onProgress) {
+    const apiKey = Settings.get('gemini');
+    if (!apiKey) throw new Error('Gemini API key not set. Click Settings to add it.');
+
+    const base64Full = await fileToBase64(imageFile);
+    const mimeType = imageFile.type || 'image/jpeg';
+
+    // Step 1: Detect bounding boxes
+    if (onProgress) onProgress('Detecting cards in image...');
+    const detectRaw = await callGemini(DETECT_PROMPT, base64Full, mimeType);
+
+    let boxes = [];
+    try {
+      const parsed = JSON.parse(detectRaw);
+      boxes = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      const match = detectRaw.match(/\[[\s\S]*\]/);
+      if (match) boxes = JSON.parse(match[0]);
+    }
+
+    if (!boxes.length) {
+      if (onProgress) onProgress('No cards detected — trying full image identification...');
+      // Fallback: treat whole image as one card
+      boxes = [{ card_index: 1, x: 0, y: 0, width: 1, height: 1 }];
+    }
+
+    if (onProgress) onProgress(`Detected ${boxes.length} card(s) — identifying each one...`);
+
+    // Step 2: Crop and identify each card
+    const cards = [];
+    for (let i = 0; i < boxes.length; i++) {
+      const box = boxes[i];
+      if (onProgress) onProgress(`Identifying card ${i + 1} of ${boxes.length}...`);
+
+      try {
+        // Crop the card
+        const croppedBase64 = await cropCard(imageFile, box);
+
+        // Identify the cropped card
+        const identifyRaw = await callGemini(IDENTIFY_PROMPT, croppedBase64, 'image/jpeg');
+
+        let card;
+        try {
+          // Try parsing as object first
+          const cleaned = identifyRaw.replace(/^[\s\S]*?(\{)/, '{');
+          card = JSON.parse(cleaned);
+        } catch {
+          // Try extracting object from text
+          const match = identifyRaw.match(/\{[\s\S]*\}/);
+          if (match) card = JSON.parse(match[0]);
+        }
+
+        if (card && card.name) {
+          cards.push({
+            name: card.name || '',
+            set: card.set || '',
+            rarity_variant: card.rarity_variant || '',
+            tcgplayer_search: card.tcgplayer_search || '',
+            confidence: card.confidence || 'medium',
+            internal_audit: card.internal_audit || ''
+          });
+        }
+      } catch (err) {
+        if (onProgress) onProgress(`Card ${i + 1} failed: ${err.message}`);
+      }
+
+      // Small delay between API calls
+      if (i < boxes.length - 1) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    return cards;
   }
 
   return { identifyCards };

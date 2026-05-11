@@ -151,7 +151,7 @@ const App = (() => {
       const file = files[i];
       log(`Analyzing image ${i + 1}/${files.length}: ${file.name}`);
       try {
-        const cards = await Gemini.identifyCards(file);
+        const cards = await Gemini.identifyCards(file, (msg) => log(`  → ${msg}`));
         log(`  → Found ${cards.length} card(s)`, 'ok');
         cards.forEach(c => {
           const key = `${c.name}||${c.set}`;
