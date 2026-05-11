@@ -12,19 +12,13 @@ const Gemini = (() => {
   };
 
   // ─── STEP 1 PROMPT: Detect card bounding boxes ───
-  const DETECT_PROMPT = `You are a card detection system. Look at this image and find every Pokémon card visible.
+  const DETECT_PROMPT = `Look at this image and find every Pokémon card visible. Return their positions as fractions of the image size (0 to 1).
 
-For each card, return its bounding box as a fraction of the image dimensions (values between 0 and 1).
+Return ONLY a JSON array, nothing else, no markdown, no explanation:
+[{"card_index":1,"x":0.05,"y":0.02,"width":0.28,"height":0.45},{"card_index":2,"x":0.36,"y":0.02,"width":0.28,"height":0.45}]
 
-Return ONLY a valid JSON array, no markdown, no backticks:
-[
-  { "card_index": 1, "x": 0.05, "y": 0.02, "width": 0.28, "height": 0.45 },
-  { "card_index": 2, "x": 0.36, "y": 0.02, "width": 0.28, "height": 0.45 }
-]
-
-Where x/y is the top-left corner of the card, and width/height are the card's dimensions — all as fractions of the full image size.
-If only one card is visible, return an array with one object.
-Be generous with the bounding box — include a small margin around each card.`;
+x and y = top-left corner of each card. width and height = card dimensions. All values between 0 and 1.
+Include a small margin around each card. If only one card is visible, return one object in the array.`;
 
   // ─── STEP 2 PROMPT: Identify a single cropped card ───
   const IDENTIFY_PROMPT = `You are a Pokémon TCG Forensic Scanner. Identify the single card in this image for TCGPlayer with 100% accuracy.
@@ -199,13 +193,18 @@ Return ONLY a single JSON object, no array, no markdown, no backticks:
 
         let card;
         try {
-          // Try parsing as object first
-          const cleaned = identifyRaw.replace(/^[\s\S]*?(\{)/, '{');
-          card = JSON.parse(cleaned);
+          // Strip markdown fences first
+          const stripped = identifyRaw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+          // Try direct parse
+          card = JSON.parse(stripped);
         } catch {
-          // Try extracting object from text
-          const match = identifyRaw.match(/\{[\s\S]*\}/);
-          if (match) card = JSON.parse(match[0]);
+          try {
+            // Try extracting first JSON object from text
+            const match = identifyRaw.match(/\{[\s\S]*?\}/);
+            if (match) card = JSON.parse(match[0]);
+          } catch {
+            if (onProgress) onProgress(`Card ${i+1} parse failed: ${identifyRaw.substring(0, 80)}`);
+          }
         }
 
         if (card && card.name) {
