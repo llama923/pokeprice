@@ -1,4 +1,4 @@
-// gemini.js — Gemini Vision API for Pokémon card identification
+// gemini.js — Gemini Vision: identify card names + positions only
 
 const Gemini = (() => {
   const MODEL = 'gemini-2.5-flash';
@@ -11,52 +11,29 @@ const Gemini = (() => {
     maxOutputTokens: 8192,
   };
 
-  const PROMPT = `You are a Pokémon TCG Forensic Scanner. Identify every Pokémon card visible in this image for TCGPlayer.
+  const PROMPT = `You are a Pokémon TCG card detector. Look at this image and identify every Pokémon card visible.
 
-ABSOLUTE RULES:
-- Identify each card primarily by its VISUAL APPEARANCE — artwork, art style, card layout, era, and any visible text or stamps.
-- The collector number is a secondary confirmation. If blurry or unreadable, rely on visual ID alone.
-- NEVER invent a card. If you are not confident, set confidence to "low" — do not guess.
-- NEVER default to the most common version of a card. Each card must be identified by what is actually visible.
+For each card return:
+1. The card name as it appears on TCGPlayer (e.g. "Scizor EX", "M Manectric EX", "Charizard VMAX")
+2. The art style to help narrow down which version it is (e.g. "Full Art", "Secret Rare", "Holo", "Reverse Holo", "Rainbow Rare")
+3. Its approximate position in the image as fractions 0-1 (x, y = top-left corner, width, height)
 
-FOR EACH CARD, follow these steps:
-
-1. VISUAL ID: What Pokémon or Trainer is shown? Describe the artwork style and card layout.
-
-2. ERA + ART STYLE:
-   - Standard/Holo: art inside a frame, shiny art = Holo
-   - Reverse Holo: shiny background, non-shiny art (all eras from Legendary Collection onward)
-   - Full Art EX/GX/V (BW through SwSh): art bleeds to edges, embossed fingerprint texture, solid/patterned background
-   - Rainbow Rare (Sun & Moon through Sword & Shield ONLY): rainbow gradient over entire card including character
-   - Alternate Art (SwSh): full scene art, number exceeds set total
-   - Illustration Rare (S&V): full scene, 1 gold star
-   - Special Illustration Rare (S&V): full scene EX/Supporter, 2 gold stars, glitter foil
-   - Hyper Rare (S&V): entirely gold card, 3 gold stars
-
-3. XY SECRET RARE CHECK: In the XY era, Secret Rare EX cards have a DUAL-TYPE split color in the name bar and frame (e.g. half blue/half red). Standard Full Art EX cards have ONE solid color. Dual color = number exceeds set total.
-
-4. RARITY SYMBOLS:
-   - Pre-Scarlet & Violet: ALL ultra rares use a single white or black star (EX, GX, V, VMAX, Full Arts, Rainbow Rares, Alternate Arts). Never assume multiple stars on pre-S&V cards.
-   - Scarlet & Violet only: 2 black stars = Double Rare, 2 silver = Ultra Rare, 1 gold = IR, 2 gold = SIR, 3 gold = Hyper Rare
-
-5. VINTAGE (1999-2003 WOTC only):
-   - 1st Edition stamp = small oval stamp below left of artwork
-   - Shadowless = no drop shadow on right side of art box (Base Set only)
-   - Unlimited = drop shadow present
-
-6. NUMBER: Read the collector number from the bottom of the card. If unreadable, use visual ID to determine it.
-
-Return ONLY a valid JSON array, no markdown, no backticks, no explanation:
+Return ONLY a valid JSON array, no markdown, no backticks:
 [
   {
-    "name": "Official TCGPlayer card name",
-    "set": "Full set name and collector number (e.g., BREAKpoint 76/122)",
-    "rarity_variant": "Holo Rare / Reverse Holo / Full Art / Secret Rare / Rainbow Rare / Alternate Art / Illustration Rare / Special Illustration Rare / Hyper Rare / 1st Edition / Shadowless / Promo",
-    "internal_audit": "Brief visual evidence: art style, frame color, era, any stamps or textures seen",
-    "tcgplayer_search": "Card name set number",
-    "confidence": "high / medium / low"
+    "name": "Scizor EX",
+    "art_style": "Full Art",
+    "search_hint": "Scizor EX Full Art BREAKpoint",
+    "x": 0.0,
+    "y": 0.0,
+    "width": 0.33,
+    "height": 0.5
   }
-]`;
+]
+
+Be precise about the name — "Charizard" and "Charizard VMAX" are different cards.
+For art_style, note if it is: Full Art, Secret Rare, Holo, Reverse Holo, Rainbow Rare, Standard, 1st Edition, Shadowless.
+search_hint should be the best search string to find this exact card on TCGPlayer.`;
 
   async function identifyCards(imageFile, onProgress) {
     const apiKey = Settings.get('gemini');
@@ -65,7 +42,7 @@ Return ONLY a valid JSON array, no markdown, no backticks, no explanation:
     const base64 = await fileToBase64(imageFile);
     const mimeType = imageFile.type || 'image/jpeg';
 
-    if (onProgress) onProgress('Sending image to Gemini for identification...');
+    if (onProgress) onProgress('Identifying cards in image...');
 
     const payload = {
       contents: [{
@@ -100,11 +77,8 @@ Return ONLY a valid JSON array, no markdown, no backticks, no explanation:
       cards = JSON.parse(cleaned);
     } catch {
       const match = cleaned.match(/\[[\s\S]*\]/);
-      if (match) {
-        cards = JSON.parse(match[0]);
-      } else {
-        throw new Error('Gemini returned unexpected format. Try again with a clearer image.');
-      }
+      if (match) cards = JSON.parse(match[0]);
+      else throw new Error('Gemini returned unexpected format. Try again with a clearer image.');
     }
 
     return Array.isArray(cards) ? cards : [];

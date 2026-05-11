@@ -221,13 +221,41 @@
     </div>
   </div>
 
+  <!-- PICKER MODAL -->
+  <div class="modal-overlay" id="pickerModal">
+    <div class="modal modal-picker">
+      <div class="modal-header">
+        <h2 id="pickerTitle">Pick version</h2>
+        <button class="modal-close" id="btnClosePicker">✕</button>
+      </div>
+      <div class="picker-body">
+        <!-- Left: photo with highlight -->
+        <div class="picker-photo-panel">
+          <div class="picker-photo-wrap">
+            <img id="pickerPhoto" src="" alt="Card photo" />
+            <div id="pickerHighlight" class="picker-highlight"></div>
+          </div>
+          <p class="picker-photo-hint">Your photo — find this card on the right</p>
+        </div>
+        <!-- Right: TCG DB results -->
+        <div class="picker-results-panel">
+          <div class="picker-search-wrap">
+            <input type="text" id="pickerSearch" placeholder="Search card name..." />
+          </div>
+          <div class="picker-grid" id="pickerGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST -->
   <div class="toast" id="toast"></div>
 
   <script src="js/settings.js"></script>
-  <script src="js/gemini.js?v=22"></script>
-  <script src="js/justtcg.js?v=22"></script>
-  <script src="js/sheets.js?v=22"></script>
-  <script src="js/app.js?v=22"></script>
+  <script src="js/gemini.js?v=23"></script>
+  <script src="js/tcgdb.js?v=23"></script>
+  <script src="js/justtcg.js?v=23"></script>
+  <script src="js/sheets.js?v=23"></script>
+  <script src="js/app.js?v=23"></script>
 </body>
 </html>
