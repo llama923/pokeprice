@@ -1,4 +1,4 @@
-// gemini.js — Gemini Vision: identify card names + positions only
+// gemini.js — Gemini Vision: identify cards with primary match + alternatives
 
 const Gemini = (() => {
   const MODEL = 'gemini-2.5-flash';
@@ -14,9 +14,9 @@ const Gemini = (() => {
   const PROMPT = `You are a Pokémon TCG card detector. Look at this image and identify every Pokémon card visible.
 
 For each card return:
-1. The card name as it appears on TCGPlayer (e.g. "Scizor EX", "M Manectric EX", "Charizard VMAX")
-2. The art style to help narrow down which version it is (e.g. "Full Art", "Secret Rare", "Holo", "Reverse Holo", "Rainbow Rare")
-3. Its approximate position in the image as fractions 0-1 (x, y = top-left corner, width, height)
+1. Your best guess for the card name and art style
+2. 2-3 alternative guesses in case your first guess is wrong (different versions, similar cards)
+3. The card's approximate position in the image as fractions 0-1
 
 Return ONLY a valid JSON array, no markdown, no backticks:
 [
@@ -24,6 +24,10 @@ Return ONLY a valid JSON array, no markdown, no backticks:
     "name": "Scizor EX",
     "art_style": "Full Art",
     "search_hint": "Scizor EX Full Art BREAKpoint",
+    "alternatives": [
+      {"name": "Scizor EX", "search_hint": "Scizor EX BREAKpoint 76/122"},
+      {"name": "Scizor EX", "search_hint": "Scizor EX Full Art 119/122"}
+    ],
     "x": 0.0,
     "y": 0.0,
     "width": 0.33,
@@ -31,9 +35,13 @@ Return ONLY a valid JSON array, no markdown, no backticks:
   }
 ]
 
-Be precise about the name — "Charizard" and "Charizard VMAX" are different cards.
-For art_style, note if it is: Full Art, Secret Rare, Holo, Reverse Holo, Rainbow Rare, Standard, 1st Edition, Shadowless.
-search_hint should be the best search string to find this exact card on TCGPlayer.`;
+Rules:
+- Be precise about names: "Charizard" and "Charizard VMAX" are different cards
+- For art_style use: Full Art, Secret Rare, Holo, Reverse Holo, Rainbow Rare, Standard, 1st Edition, Shadowless
+- search_hint should be the best TCGPlayer search string for that exact version
+- alternatives should be other plausible versions of the same card or similar cards
+- x, y, width, height are fractions of the full image (0 to 1)
+- If a card is the back of a card or unidentifiable, still include it with name "Unknown Card"`;
 
   async function identifyCards(imageFile, onProgress) {
     const apiKey = Settings.get('gemini');
@@ -84,6 +92,29 @@ search_hint should be the best search string to find this exact card on TCGPlaye
     return Array.isArray(cards) ? cards : [];
   }
 
+  // Crop a card region from an image file, returns object URL
+  async function cropCard(imageFile, box) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(imageFile);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const pad = 0.01;
+        const x = Math.max(0, (box.x - pad)) * img.width;
+        const y = Math.max(0, (box.y - pad)) * img.height;
+        const w = Math.min(img.width - x, (box.width + pad * 2) * img.width);
+        const h = Math.min(img.height - y, (box.height + pad * 2) * img.height);
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      };
+      img.onerror = () => reject(new Error('Failed to crop image'));
+      img.src = url;
+    });
+  }
+
   async function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -93,5 +124,5 @@ search_hint should be the best search string to find this exact card on TCGPlaye
     });
   }
 
-  return { identifyCards };
+  return { identifyCards, cropCard };
 })();

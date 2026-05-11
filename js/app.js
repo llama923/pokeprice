@@ -1,21 +1,21 @@
-// app.js — Main application controller with card version picker
+// app.js — Main application controller with visual card verification
 
 const App = (() => {
   let uploadedFiles = [];
-  let identifiedCards = [];
-  let pricedResults  = [];
+  let identifiedCards = []; // each card has: name, art_style, search_hint, alternatives, x,y,width,height, sourceFile, cropDataUrl, pickedCard, tcgMatches, condition, rowId
+  let pricedResults = [];
 
   const $ = id => document.getElementById(id);
-  const uploadZone     = $('uploadZone');
-  const fileInput      = $('fileInput');
-  const previewGrid    = $('previewGrid');
-  const btnAnalyze     = $('btnAnalyze');
-  const stepUpload     = $('stepUpload');
-  const stepReview     = $('stepReview');
-  const stepResults    = $('stepResults');
-  const cardsTableBody = $('cardsTableBody');
-  const cardCount      = $('cardCount');
-  const btnFetchPrices = $('btnFetchPrices');
+  const uploadZone      = $('uploadZone');
+  const fileInput       = $('fileInput');
+  const previewGrid     = $('previewGrid');
+  const btnAnalyze      = $('btnAnalyze');
+  const stepUpload      = $('stepUpload');
+  const stepReview      = $('stepReview');
+  const stepResults     = $('stepResults');
+  const cardsList       = $('cardsList');
+  const cardCount       = $('cardCount');
+  const btnFetchPrices  = $('btnFetchPrices');
   const resultsTableBody = $('resultsTableBody');
   const resultsSummary   = $('resultsSummary');
   const btnExportSheets  = $('btnExportSheets');
@@ -55,9 +55,8 @@ const App = (() => {
   }
 
   function conditionBadge(cond) { return `<span class="condition-badge cond-${cond}">${cond}</span>`; }
-
   function escHtml(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
   // ─── UPLOAD ───
@@ -109,9 +108,25 @@ const App = (() => {
       try {
         const cards = await Gemini.identifyCards(file, msg => log(`  → ${msg}`));
         log(`  → Found ${cards.length} card(s)`, 'ok');
-        cards.forEach(c => {
-          identifiedCards.push({ ...c, rowId: crypto.randomUUID(), condition: 'NM', sourceFile: file, pickedCard: null });
-        });
+
+        for (const c of cards) {
+          // Crop the card region from the photo
+          let cropDataUrl = null;
+          if (c.x != null && c.width) {
+            try { cropDataUrl = await Gemini.cropCard(file, c); } catch {}
+          }
+
+          const card = {
+            ...c,
+            rowId: crypto.randomUUID(),
+            condition: 'NM',
+            sourceFile: file,
+            cropDataUrl,
+            pickedCard: null,
+            tcgMatches: null // loaded lazily
+          };
+          identifiedCards.push(card);
+        }
       } catch (err) {
         log(`  → Error: ${err.message}`, 'error');
         toast(`Image ${i + 1} failed: ${err.message}`, 'err');
@@ -120,72 +135,121 @@ const App = (() => {
 
     setButtonLoading(btnAnalyze, false);
     if (!identifiedCards.length) { toast('No cards identified. Try clearer photos.', 'err'); return; }
-    log(`Total: ${identifiedCards.length} card(s) identified`, 'ok');
-    toast(`Found ${identifiedCards.length} cards! Pick the correct version for each.`, 'ok');
+
+    log(`Total: ${identifiedCards.length} card(s) — loading TCG matches...`, 'ok');
+    toast(`Found ${identifiedCards.length} cards! Loading TCGPlayer matches...`, 'ok');
+
+    // Load TCG matches for all cards in background
+    loadAllTCGMatches();
+
     showReviewStep();
   }
 
-  // ─── REVIEW TABLE ───
+  // ─── LOAD TCG MATCHES IN BACKGROUND ───
+  async function loadAllTCGMatches() {
+    for (const card of identifiedCards) {
+      try {
+        const results = await TCGDB.searchWithHint(card.name, card.search_hint);
+        card.tcgMatches = results.map(TCGDB.formatCard);
+        // Auto-pick the best match
+        if (card.tcgMatches.length && !card.pickedCard) {
+          card.pickedCard = card.tcgMatches[0];
+        }
+        updateCardRow(card.rowId);
+      } catch {
+        card.tcgMatches = [];
+        updateCardRow(card.rowId);
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+    log('All TCG matches loaded', 'ok');
+  }
+
+  // ─── REVIEW STEP ───
   function showReviewStep() {
     stepReview.removeAttribute('hidden');
     stepReview.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    renderCardsTable();
+    renderCardsList();
   }
 
-  function renderCardsTable() {
+  function renderCardsList() {
     cardCount.textContent = `${identifiedCards.length} card${identifiedCards.length !== 1 ? 's' : ''} identified`;
-    cardsTableBody.innerHTML = '';
-    identifiedCards.forEach(card => {
-      const tr = document.createElement('tr');
-      tr.dataset.rowid = card.rowId;
-      const picked = card.pickedCard;
-      const setDisplay = picked
-        ? `<span style="color:var(--success);font-size:13px">${escHtml(picked.setName)} ${escHtml(picked.number)}</span>`
-        : `<span style="color:var(--text-faint);font-size:12px;font-style:italic">Not picked</span>`;
-      const pickStyle = picked
-        ? 'background:transparent;border:1px solid var(--success);color:var(--success);'
-        : 'background:var(--accent);border:none;color:#0d0f14;';
+    cardsList.innerHTML = '';
+    identifiedCards.forEach(card => cardsList.appendChild(createCardRow(card)));
 
-      tr.innerHTML = `
-        <td>
-          <div style="font-weight:500;font-size:14px">${escHtml(card.name)}</div>
-          <div style="font-size:11px;color:var(--text-faint);margin-top:2px">${escHtml(card.art_style || '')}</div>
-        </td>
-        <td>${setDisplay}</td>
-        <td>
-          <select class="card-condition" data-rowid="${card.rowId}">
-            ${['NM','LP','MP','HP','DMG'].map(c => `<option value="${c}" ${c === card.condition ? 'selected' : ''}>${c}</option>`).join('')}
-          </select>
-        </td>
-        <td>
-          <button class="btn-pick" data-rowid="${card.rowId}"
-            style="${pickStyle}font-family:var(--font-body);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all 0.2s">
-            ${picked ? '✓ Change' : 'Pick Version'}
-          </button>
-        </td>
-        <td><button class="btn-row-delete" data-rowid="${card.rowId}" title="Remove">✕</button></td>
-      `;
-      cardsTableBody.appendChild(tr);
-    });
+    // Bind bulk condition
+    bulkCondition.onchange = e => {
+      const val = e.target.value; if (!val) return;
+      identifiedCards.forEach(c => c.condition = val);
+      cardsList.querySelectorAll('.card-condition-sel').forEach(sel => sel.value = val);
+      bulkCondition.value = '';
+    };
+  }
 
-    cardsTableBody.querySelectorAll('.card-condition').forEach(sel => {
-      sel.addEventListener('change', e => {
-        const c = identifiedCards.find(c => c.rowId === e.target.dataset.rowid);
-        if (c) c.condition = e.target.value;
-      });
+  function createCardRow(card) {
+    const row = document.createElement('div');
+    row.className = 'verify-row';
+    row.dataset.rowid = card.rowId;
+    row.innerHTML = buildRowHTML(card);
+    bindRowEvents(row, card);
+    return row;
+  }
+
+  function buildRowHTML(card) {
+    const picked = card.pickedCard;
+    const tcgImg = picked
+      ? `<img src="${escHtml(picked.image)}" alt="${escHtml(picked.name)}" class="verify-tcg-img" title="Click to change" />`
+      : `<div class="verify-tcg-placeholder">${card.tcgMatches === null ? '<span class="loading-dots">Loading...</span>' : 'Not found'}</div>`;
+
+    const cropImg = card.cropDataUrl
+      ? `<img src="${escHtml(card.cropDataUrl)}" alt="Your card" class="verify-crop-img" />`
+      : `<div class="verify-crop-placeholder">No crop</div>`;
+
+    const setLabel = picked ? `${escHtml(picked.setName)} ${escHtml(picked.number)}` : '';
+
+    return `
+      <div class="verify-crop-wrap" title="Your photo crop">${cropImg}</div>
+      <div class="verify-arrow">→</div>
+      <div class="verify-tcg-wrap" data-action="pick" title="Click to change version">
+        ${tcgImg}
+        <div class="verify-tcg-info">
+          <div class="verify-tcg-name">${escHtml(card.name)}</div>
+          ${setLabel ? `<div class="verify-tcg-set">${setLabel}</div>` : ''}
+          ${picked?.rarity ? `<div class="verify-tcg-rarity">${escHtml(picked.rarity)}</div>` : ''}
+        </div>
+      </div>
+      <div class="verify-controls">
+        <select class="card-condition-sel" data-rowid="${card.rowId}">
+          ${['NM','LP','MP','HP','DMG'].map(c => `<option value="${c}" ${c === card.condition ? 'selected':''}>${c}</option>`).join('')}
+        </select>
+        <button class="btn-row-delete" data-rowid="${card.rowId}" title="Remove card">✕</button>
+      </div>
+    `;
+  }
+
+  function bindRowEvents(row, card) {
+    row.querySelector('.card-condition-sel').addEventListener('change', e => {
+      const c = identifiedCards.find(c => c.rowId === e.target.dataset.rowid);
+      if (c) c.condition = e.target.value;
     });
-    cardsTableBody.querySelectorAll('.btn-pick').forEach(btn => {
-      btn.addEventListener('click', () => openPicker(btn.dataset.rowid));
-    });
-    cardsTableBody.querySelectorAll('.btn-row-delete').forEach(btn => {
-      btn.addEventListener('click', () => {
-        identifiedCards = identifiedCards.filter(c => c.rowId !== btn.dataset.rowid);
-        renderCardsTable();
-      });
+    row.querySelector('[data-action="pick"]').addEventListener('click', () => openPicker(card.rowId));
+    row.querySelector('.btn-row-delete').addEventListener('click', () => {
+      identifiedCards = identifiedCards.filter(c => c.rowId !== card.rowId);
+      row.remove();
+      cardCount.textContent = `${identifiedCards.length} card${identifiedCards.length !== 1 ? 's' : ''} identified`;
     });
   }
 
-  // ─── PICKER ───
+  function updateCardRow(rowId) {
+    const card = identifiedCards.find(c => c.rowId === rowId);
+    if (!card) return;
+    const row = cardsList.querySelector(`[data-rowid="${rowId}"]`);
+    if (!row) return;
+    row.innerHTML = buildRowHTML(card);
+    bindRowEvents(row, card);
+  }
+
+  // ─── PICKER MODAL ───
   let currentPickerRowId = null;
 
   function openPicker(rowId) {
@@ -193,84 +257,70 @@ const App = (() => {
     const card = identifiedCards.find(c => c.rowId === rowId);
     if (!card) return;
 
-    $('pickerTitle').textContent = `Pick version: ${card.name}`;
+    $('pickerTitle').textContent = card.name;
     $('pickerSearch').value = card.name;
 
-    const photo = $('pickerPhoto');
-    const highlight = $('pickerHighlight');
-
-    if (card.sourceFile) {
-      const oldUrl = photo.src;
-      photo.src = URL.createObjectURL(card.sourceFile);
-      photo.onload = () => {
-        if (oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
-        if (card.x != null && card.width) {
-          highlight.style.cssText = `display:block;left:${card.x*100}%;top:${card.y*100}%;width:${card.width*100}%;height:${card.height*100}%`;
-        } else {
-          highlight.style.display = 'none';
-        }
-      };
-    } else {
-      photo.src = '';
-      highlight.style.display = 'none';
-    }
-
-    const grid = $('pickerGrid');
-    grid.innerHTML = '<div class="picker-loading">Searching TCG database...</div>';
+    // Show alternatives + full results
+    renderPickerGrid(card);
     $('pickerModal').classList.add('open');
-    loadPickerCards(card.name, card.search_hint, grid);
 
     let t;
     $('pickerSearch').oninput = () => {
       clearTimeout(t);
       t = setTimeout(() => {
-        grid.innerHTML = '<div class="picker-loading">Searching...</div>';
-        loadPickerCards($('pickerSearch').value, null, grid);
-      }, 500);
+        $('pickerGrid').innerHTML = '<div class="picker-loading">Searching...</div>';
+        loadPickerSearch($('pickerSearch').value);
+      }, 400);
     };
   }
 
-  async function loadPickerCards(name, hint, grid) {
-    if (!name.trim()) return;
-    try {
-      const results = await TCGDB.searchWithHint(name.trim(), hint);
-      if (!results.length) {
-        grid.innerHTML = `<div class="picker-loading">No results for "${escHtml(name)}" — try editing the search above.</div>`;
-        return;
+  async function renderPickerGrid(card) {
+    const grid = $('pickerGrid');
+
+    if (card.tcgMatches && card.tcgMatches.length) {
+      renderPickerCards(card.tcgMatches, grid);
+    } else {
+      grid.innerHTML = '<div class="picker-loading">Loading matches...</div>';
+      try {
+        const results = await TCGDB.searchWithHint(card.name, card.search_hint);
+        card.tcgMatches = results.map(TCGDB.formatCard);
+        renderPickerCards(card.tcgMatches, grid);
+      } catch (err) {
+        grid.innerHTML = `<div class="picker-loading" style="color:var(--error)">Error: ${escHtml(err.message)}</div>`;
       }
-      grid.innerHTML = '';
-      results.map(TCGDB.formatCard).forEach(card => {
-        const item = document.createElement('div');
-        item.className = 'picker-card';
-        item.innerHTML = `
-          <img src="${escHtml(card.image)}" alt="${escHtml(card.name)}" loading="lazy"
-            onerror="this.style.background='var(--bg3)';this.style.minHeight='88px'" />
-          <div class="picker-card-label">${escHtml(card.setName)}</div>
-          <div class="picker-card-number">${escHtml(card.number)}</div>
-          ${card.rarity ? `<div class="picker-card-rarity">${escHtml(card.rarity)}</div>` : ''}
-        `;
-        item.addEventListener('click', () => selectCard(card));
-        grid.appendChild(item);
-      });
-    } catch (err) {
-      grid.innerHTML = `<div class="picker-loading" style="color:var(--error)">Error: ${escHtml(err.message)}</div>`;
     }
   }
 
-  function selectCard(pickedCard) {
-    const card = identifiedCards.find(c => c.rowId === currentPickerRowId);
-    if (card) { card.pickedCard = pickedCard; card.name = pickedCard.name; renderCardsTable(); }
-    $('pickerModal').classList.remove('open');
-    toast(`✓ ${pickedCard.name} — ${pickedCard.setName} ${pickedCard.number}`, 'ok');
+  async function loadPickerSearch(query) {
+    if (!query.trim()) return;
+    try {
+      const results = await TCGDB.searchCard(query.trim());
+      renderPickerCards(results.map(TCGDB.formatCard), $('pickerGrid'));
+    } catch (err) {
+      $('pickerGrid').innerHTML = `<div class="picker-loading" style="color:var(--error)">Error: ${escHtml(err.message)}</div>`;
+    }
   }
 
-  // ─── BULK CONDITION ───
-  function setupBulkCondition() {
-    bulkCondition.addEventListener('change', e => {
-      const val = e.target.value; if (!val) return;
-      identifiedCards.forEach(c => c.condition = val);
-      cardsTableBody.querySelectorAll('.card-condition').forEach(sel => sel.value = val);
-      bulkCondition.value = '';
+  function renderPickerCards(cards, grid) {
+    if (!cards.length) { grid.innerHTML = '<div class="picker-loading">No results found — try editing the search above.</div>'; return; }
+    grid.innerHTML = '';
+    cards.forEach(card => {
+      const item = document.createElement('div');
+      item.className = 'picker-card';
+      item.innerHTML = `
+        <img src="${escHtml(card.image)}" alt="${escHtml(card.name)}" loading="lazy"
+          onerror="this.style.background='var(--bg3)';this.style.minHeight='88px'" />
+        <div class="picker-card-label">${escHtml(card.setName)}</div>
+        <div class="picker-card-number">${escHtml(card.number)}</div>
+        ${card.rarity ? `<div class="picker-card-rarity">${escHtml(card.rarity)}</div>` : ''}
+      `;
+      item.addEventListener('click', () => {
+        const c = identifiedCards.find(c => c.rowId === currentPickerRowId);
+        if (c) { c.pickedCard = card; c.name = card.name; updateCardRow(c.rowId); }
+        $('pickerModal').classList.remove('open');
+        toast(`✓ ${card.name} — ${card.setName} ${card.number}`, 'ok');
+      });
+      grid.appendChild(item);
     });
   }
 
@@ -285,8 +335,15 @@ const App = (() => {
     btnConfirmAdd.addEventListener('click', () => {
       const name = $('manualCardName').value.trim();
       if (!name) { toast('Enter a card name', 'err'); return; }
-      identifiedCards.push({ name, art_style: '', search_hint: name, condition: $('manualCondition').value, rowId: crypto.randomUUID(), sourceFile: null, pickedCard: null });
-      renderCardsTable();
+      const card = { name, art_style: '', search_hint: name, alternatives: [], condition: $('manualCondition').value, rowId: crypto.randomUUID(), sourceFile: null, cropDataUrl: null, pickedCard: null, tcgMatches: null };
+      identifiedCards.push(card);
+      cardsList.appendChild(createCardRow(card));
+      // Load TCG matches for manually added card
+      TCGDB.searchCard(name).then(results => {
+        card.tcgMatches = results.map(TCGDB.formatCard);
+        if (card.tcgMatches.length) card.pickedCard = card.tcgMatches[0];
+        updateCardRow(card.rowId);
+      });
       addCardModal.classList.remove('open');
       if (stepReview.hasAttribute('hidden')) showReviewStep();
       toast(`Added: ${name}`, 'ok');
@@ -297,9 +354,6 @@ const App = (() => {
   async function fetchPrices() {
     if (!Settings.get('justTCG')) { toast('Add your JustTCG API key in Settings first', 'err'); $('btnOpenSettings').click(); return; }
     if (!identifiedCards.length) { toast('No cards to price', 'err'); return; }
-
-    const unpicked = identifiedCards.filter(c => !c.pickedCard).length;
-    if (unpicked > 0) toast(`Note: ${unpicked} card(s) have no version picked — using Gemini's name`, 'warn');
 
     setButtonLoading(btnFetchPrices, true);
     log(`Fetching prices for ${identifiedCards.length} card(s)...`);
@@ -335,7 +389,7 @@ const App = (() => {
     pricedResults.forEach(r => {
       const tr = document.createElement('tr');
       const priceDisplay = r.price != null ? `<span class="price-cell has-price">$${Number(r.price).toFixed(2)}</span>` : `<span class="price-cell no-price">Not found</span>`;
-      const src = r.url ? `<a href="${r.url}" target="_blank" class="source-link" rel="noopener">${r.source || 'View'} ↗</a>` : `<span style="color:var(--text-faint);font-size:12px">${r.source||'—'}</span>`;
+      const src = r.url ? `<a href="${r.url}" target="_blank" class="source-link" rel="noopener">${r.source||'View'} ↗</a>` : `<span style="color:var(--text-faint);font-size:12px">${r.source||'—'}</span>`;
       tr.innerHTML = `<td><strong>${escHtml(r.name)}</strong></td><td style="color:var(--text-dim);font-size:13px">${escHtml(r.set||'—')}</td><td>${conditionBadge(r.condition)}</td><td>${priceDisplay}</td><td>${src}</td>`;
       resultsTableBody.appendChild(tr);
     });
@@ -363,15 +417,14 @@ const App = (() => {
     const csv = [header, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `pokeprice_${new Date().toISOString().slice(0,10)}.csv`;
+    const a = document.createElement('a'); a.href = url; a.download = `pokeprice_${new Date().toISOString().slice(0,10)}.csv`;
     a.click(); URL.revokeObjectURL(url);
     toast('CSV downloaded!', 'ok');
   }
 
   function startOver() {
     uploadedFiles = []; identifiedCards = []; pricedResults = [];
-    previewGrid.innerHTML = ''; cardsTableBody.innerHTML = ''; resultsTableBody.innerHTML = '';
+    previewGrid.innerHTML = ''; cardsList.innerHTML = ''; resultsTableBody.innerHTML = '';
     fileInput.value = ''; btnAnalyze.disabled = true;
     stepReview.setAttribute('hidden',''); stepResults.setAttribute('hidden','');
     btnExportSheets.disabled = false; btnExportSheets.style.background = '';
@@ -388,7 +441,7 @@ const App = (() => {
   }
 
   function init() {
-    setupUpload(); setupBulkCondition(); setupAddCard(); setupLog(); setupPicker();
+    setupUpload(); setupAddCard(); setupLog(); setupPicker();
     btnAnalyze.addEventListener('click', analyzeImages);
     btnFetchPrices.addEventListener('click', fetchPrices);
     btnExportSheets.addEventListener('click', exportToSheets);
