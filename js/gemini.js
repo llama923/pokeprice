@@ -11,32 +11,52 @@ const Gemini = (() => {
     maxOutputTokens: 8192,
   };
 
-  const PROMPT = `You are a Pokémon TCG expert. Look at this image and identify every Pokémon card visible.
+  const PROMPT = `You are a Pokémon TCG Forensic Scanner. Identify every Pokémon card visible in this image for TCGPlayer.
 
-For each card return the name and a search hint to find the exact version on TCGPlayer.
+ABSOLUTE RULES:
+- Identify each card primarily by its VISUAL APPEARANCE — artwork, card style, layout, era, and any visible text or stamps.
+- The collector number is a secondary confirmation. If blurry or unreadable, rely on visual ID alone.
+- NEVER invent a card. If you are not confident, set confidence to "low" — do not guess.
+- NEVER default to the most common version of a card. Each card must be identified by what is actually visible.
 
-Rules:
-- Identify cards by their ARTWORK and VISUAL APPEARANCE first
-- Be precise: "Charizard" and "Charizard VMAX" are completely different cards
-- For EX cards: note if it is a standard EX, Full Art EX, or Secret Rare EX (dual-color frame)
-- For vintage cards (1999-2003): note if 1st Edition or Shadowless
-- search_hint should include the set name if you can identify it from the art style and era
+FOR EACH CARD, follow these steps:
 
-Return ONLY a valid JSON array, no markdown, no backticks:
+1. VISUAL ID: What Pokémon or Trainer is shown? Describe the artwork style and card layout.
+
+2. ERA + ART STYLE:
+- Standard/Holo: art inside a frame, shiny art = Holo
+- Reverse Holo: shiny background, non-shiny art (all eras from Legendary Collection onward)
+- Full Art EX/GX/V (BW through SwSh): art bleeds to edges, embossed fingerprint texture, solid/patterned background
+- Rainbow Rare (Sun & Moon through Sword & Shield ONLY): rainbow gradient over entire card including character
+- Alternate Art (SwSh): full scene art, number exceeds set total
+- Illustration Rare (S&V): full scene, 1 gold star
+- Special Illustration Rare (S&V): full scene EX/Supporter, 2 gold stars, glitter foil
+- Hyper Rare (S&V): entirely gold card, 3 gold stars
+
+3. XY SECRET RARE CHECK: In the XY era, Secret Rare EX cards have a DUAL-TYPE split color in the name bar and frame (e.g. half blue/half red). Standard Full Art EX cards have ONE solid color. Dual color = number exceeds set total.
+
+4. RARITY SYMBOLS:
+- Pre-Scarlet & Violet: ALL ultra rares use a single white or black star (EX, GX, V, VMAX, Full Arts, Rainbow Rares, Alternate Arts). Never assume multiple stars on pre-S&V cards.
+- Scarlet & Violet only: 2 black stars = Double Rare, 2 silver = Ultra Rare, 1 gold = IR, 2 gold = SIR, 3 gold = Hyper Rare
+
+5. VINTAGE (1999-2003 WOTC only):
+- 1st Edition stamp = small oval stamp below left of artwork
+- Shadowless = no drop shadow on right side of art box (Base Set only)
+- Unlimited = drop shadow present
+
+6. NUMBER: Read the collector number from the bottom of the card. If unreadable, use visual ID to determine it.
+
+If a card is a card back or completely unidentifiable, skip it entirely.
+
+Return ONLY a valid JSON array, no markdown, no backticks, no explanation:
 [
   {
-    "name": "Scizor EX",
-    "art_style": "Full Art",
-    "search_hint": "Scizor EX"
-  },
-  {
-    "name": "Volcanion EX",
-    "art_style": "Secret Rare",
-    "search_hint": "Volcanion EX Steam Siege"
+    "name": "Official TCGPlayer card name",
+    "art_style": "Full Art / Secret Rare / Holo Rare / Reverse Holo / Rainbow Rare / Alternate Art / Illustration Rare / Special Illustration Rare / Hyper Rare / 1st Edition / Shadowless / Standard",
+    "search_hint": "Best search string to find this exact card on TCGPlayer (name + set name)",
+    "confidence": "high / medium / low"
   }
-]
-
-If a card is a card back or unidentifiable, skip it entirely.`;
+]`;
 
   async function identifyCards(imageFile, onProgress) {
     const apiKey = Settings.get('gemini');
