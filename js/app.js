@@ -361,7 +361,8 @@ const App = (() => {
     const cardsToPrice=identifiedCards.map(c=>({
       name: c.pickedCard?c.pickedCard.name:c.name,
       set:  c.pickedCard?`${c.pickedCard.setName} ${c.pickedCard.number}`:'',
-      condition: c.condition
+      condition: c.condition,
+      tcgplayerId: c.pickedCard?.tcgplayerId || null
     }));
     pricedResults=await JustTCG.getPriceBatch(cardsToPrice);
     const priced=pricedResults.filter(r=>r.price!=null).length;

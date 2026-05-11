@@ -1,32 +1,71 @@
-// justtcg.js — JustTCG API for TCGPlayer market prices
-// Docs: https://justtcg.com/docs
-// Actual endpoint: GET /v1/cards?q=CARDNAME&game=pokemon
+// justtcg.js — JustTCG API using tcgplayerId for exact condition-based pricing
 
 const JustTCG = (() => {
   const BASE_URL = 'https://poke-price-proxy.c59374758.workers.dev/v1';
 
-  // Map our condition codes to JustTCG condition names
-  const CONDITION_MAP = {
-    'NM':  'near_mint',
-    'LP':  'lightly_played',
-    'MP':  'moderately_played',
-    'HP':  'heavily_played',
-    'DMG': 'damaged'
-  };
-
-  async function getPrice(cardName, condition, setInfo = '') {
+  async function getPrice(cardName, condition, setInfo = '', tcgplayerId = null) {
     const apiKey = Settings.get('justTCG');
     if (!apiKey) throw new Error('JustTCG API key not set.');
 
-    const conditionKey = CONDITION_MAP[condition] || 'near_mint';
+    // If we have a tcgplayerId, use it for a direct exact lookup
+    if (tcgplayerId) {
+      return await getPriceById(tcgplayerId, condition, cardName);
+    }
 
-    // Strip HP info that Gemini adds e.g. "Volcanion EX (180 HP)" → "Volcanion EX"
+    // Fallback: search by name
+    return await getPriceByName(cardName, condition, setInfo);
+  }
+
+  async function getPriceById(tcgplayerId, condition, cardName) {
+    const apiKey = Settings.get('justTCG');
+
+    const params = new URLSearchParams({
+      tcgplayerId: String(tcgplayerId),
+      game: 'pokemon',
+      conditions: condition,
+    });
+
+    const response = await fetch(`${BASE_URL}/cards?${params}`, {
+      headers: {
+        'X-API-Key': apiKey,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(`JustTCG error ${response.status}: ${err?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const cards = data?.data || [];
+
+    if (!cards.length) {
+      return { price: null, url: null, source: 'Not found' };
+    }
+
+    const card = cards[0];
+    const price = extractPrice(card, condition);
+    const url = card.url || buildTCGPlayerUrl(cardName);
+
+    return {
+      price,
+      url,
+      source: price ? 'TCGPlayer via JustTCG' : 'Not found',
+      productName: card.name || cardName
+    };
+  }
+
+  async function getPriceByName(cardName, condition, setInfo) {
+    const apiKey = Settings.get('justTCG');
+
+    // Clean HP info from name
     const cleanName = cardName.replace(/\s*\(\d+\s*HP\)/gi, '').trim();
 
-    // Build search query
     const params = new URLSearchParams({
       q: cleanName,
       game: 'pokemon',
+      conditions: condition,
       limit: '5'
     });
 
@@ -43,69 +82,59 @@ const JustTCG = (() => {
     }
 
     const data = await response.json();
-
-    // Cards are in data.data array
-    const cards = data?.data || data?.cards || data?.results || [];
+    const cards = data?.data || [];
 
     if (!cards.length) {
       return { price: null, url: null, source: 'Not found' };
     }
 
-    // Try to find the best match using set info
+    // Try to find best match by set info
     let card = cards[0];
     if (setInfo) {
-      // Extract card number from set info e.g. "BREAKpoint 119/122" → "119"
       const numberMatch = setInfo.match(/(\d+)\//);
       const cardNumber = numberMatch ? numberMatch[1].replace(/^0+/, '') : null;
-
-      // Extract set name without number
       const setName = setInfo.replace(/\s*\d+\/\d+$/, '').trim().toLowerCase();
 
-      // Find best match by set name or card number
       const betterMatch = cards.find(c => {
         const cSetName = (c.set_name || '').toLowerCase();
         const cNumber = (c.number || '').replace(/^0+/, '').split('/')[0];
         return (cardNumber && cNumber === cardNumber) ||
-               cSetName.includes(setName) ||
-               setName.includes(cSetName);
+               cSetName.includes(setName) || setName.includes(cSetName);
       });
       if (betterMatch) card = betterMatch;
     }
 
-    // Extract price for our condition from variants
-    const price = extractPrice(card, conditionKey);
-    const url = card.url || buildTCGPlayerUrl(cardName);
-
+    const price = extractPrice(card, condition);
     return {
       price,
-      url,
+      url: card.url || buildTCGPlayerUrl(cardName),
       source: price ? 'TCGPlayer via JustTCG' : 'Not found',
       productName: card.name || cardName
     };
   }
 
-  function extractPrice(card, conditionKey) {
+  function extractPrice(card, condition) {
     const variants = card?.variants || [];
     if (!variants.length) return null;
 
-    // conditionKey is e.g. "near_mint" — convert to "Near Mint" for matching
-    const conditionLabel = conditionKey
-      .split('_')
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
+    const conditionLabel = {
+      'NM':  'Near Mint',
+      'LP':  'Lightly Played',
+      'MP':  'Moderately Played',
+      'HP':  'Heavily Played',
+      'DMG': 'Damaged'
+    }[condition] || 'Near Mint';
 
-    // Find variant matching condition (prefer standard/unlimited printing)
     const matches = variants.filter(v => v.condition === conditionLabel);
 
     if (matches.length) {
-      // Prefer Unlimited Holofoil or Normal over 1st Edition (more common)
       const preferred = matches.find(v =>
         v.printing && (v.printing.includes('Unlimited') || v.printing.includes('Normal') || v.printing.includes('Regular'))
       ) || matches[0];
       return preferred.price ?? null;
     }
 
-    // Fallback: return first variant's price
+    // Fallback: first variant
     return variants[0]?.price ?? null;
   }
 
@@ -118,7 +147,12 @@ const JustTCG = (() => {
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i];
       try {
-        const result = await getPrice(card.name, card.condition, card.set || '');
+        const result = await getPrice(
+          card.name,
+          card.condition,
+          card.set || '',
+          card.tcgplayerId || null
+        );
         results.push({ ...card, ...result, error: null });
       } catch (err) {
         results.push({ ...card, price: null, url: null, source: 'Error', error: err.message });

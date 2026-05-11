@@ -28,7 +28,7 @@ const TCGDB = (() => {
         const params = new URLSearchParams({
           q: `name:"${variant}"`,
           pageSize: '50',
-          select: 'id,name,number,set,images,rarity,supertype,subtypes'
+          select: 'id,name,number,set,images,rarity,supertype,subtypes,tcgplayer'
         });
         const r = await fetch(`${BASE}/cards?${params}`);
         if (!r.ok) continue;
@@ -81,6 +81,8 @@ const TCGDB = (() => {
       image: card.images?.small || '',
       imageLarge: card.images?.large || '',
       label: `${card.set?.name || ''} ${card.number || ''}`,
+      tcgplayerId: card.tcgplayer?.productId || null,
+      tcgplayerUrl: card.tcgplayer?.url || '',
     };
   }
 
