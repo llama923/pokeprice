@@ -160,6 +160,7 @@ Return ONLY a single JSON object, no array, no markdown, no backticks:
     // Step 1: Detect bounding boxes
     if (onProgress) onProgress('Detecting cards in image...');
     const detectRaw = await callGemini(DETECT_PROMPT, base64Full, mimeType);
+    if (onProgress) onProgress(`Detection raw: ${detectRaw.substring(0, 120)}`);
 
     let boxes = [];
     try {
