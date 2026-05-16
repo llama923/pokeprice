@@ -100,7 +100,7 @@
     <section class="step-card" id="stepReview" hidden>
       <div class="step-label">Step 02</div>
       <h2 class="step-title">Verify Cards</h2>
-      <p class="step-desc">Your photo crop is on the left, Gemini's TCGPlayer match is on the right. Click any TCGPlayer card image to change the version.</p>
+      <p class="step-desc">Your photo is on the left, Gemini's TCGPlayer match is on the right. Click any TCGPlayer card to change the version.</p>
 
       <div class="toolbar">
         <div class="toolbar-left">
@@ -119,7 +119,20 @@
         </div>
       </div>
 
-      <div class="cards-list" id="cardsList"></div>
+      <div class="cards-table-wrap">
+        <table class="cards-table" id="cardsTable">
+          <thead>
+            <tr>
+              <th style="width:110px">Your Photo</th>
+              <th style="width:30px"></th>
+              <th>TCGPlayer Match</th>
+              <th style="width:90px">Condition</th>
+              <th style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="cardsTableBody"></tbody>
+        </table>
+      </div>
 
       <button class="btn-primary btn-full" id="btnFetchPrices">
         <span class="btn-text">Fetch Prices via JustTCG</span>
@@ -229,10 +242,10 @@
   <div class="toast" id="toast"></div>
 
   <script src="js/settings.js"></script>
-  <script src="js/gemini.js?v=38"></script>
-  <script src="js/tcgdb.js?v=38"></script>
-  <script src="js/justtcg.js?v=38"></script>
-  <script src="js/sheets.js?v=38"></script>
-  <script src="js/app.js?v=38"></script>
+  <script src="js/gemini.js?v=40"></script>
+  <script src="js/tcgdb.js?v=40"></script>
+  <script src="js/justtcg.js?v=40"></script>
+  <script src="js/sheets.js?v=40"></script>
+  <script src="js/app.js?v=40"></script>
 </body>
 </html>
