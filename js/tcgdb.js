@@ -3,65 +3,45 @@
 const TCGDB = (() => {
   const BASE = 'https://api.pokemontcg.io/v2';
 
-  // Search by exact name — tries both capitalizations (EX vs ex, GX vs gx, etc.)
+  // Search for all versions of a card by name
   async function searchCard(name) {
-    const cleanName = name.trim();
-    if (!cleanName) return [];
+    // Clean the name — remove art style hints
+    const cleanName = name
+      .replace(/\s*(full art|secret rare|holo|reverse holo|rainbow rare|alternate art)\s*/gi, '')
+      .trim();
 
-    // Build alternate capitalizations to try
-    const variants = new Set([
-      cleanName,
-      cleanName.replace(/ EX$/i, ' EX'),   // ensure uppercase EX
-      cleanName.replace(/ EX$/i, ' ex'),    // ensure lowercase ex
-      cleanName.replace(/ GX$/i, ' GX'),
-      cleanName.replace(/ GX$/i, ' gx'),
-      cleanName.replace(/ V$/i, ' V'),
-      cleanName.replace(/ VMAX$/i, ' VMAX'),
-    ]);
-
-    // Try each variant, collect all results, deduplicate by id
-    const seen = new Set();
-    const allResults = [];
-
-    for (const variant of variants) {
-      try {
-        const params = new URLSearchParams({
-          q: `name:"${variant}"`,
-          pageSize: '50',
-          select: 'id,name,number,set,images,rarity,supertype,subtypes,tcgplayer'
-        });
-        const r = await fetch(`${BASE}/cards?${params}`);
-        if (!r.ok) continue;
-        const d = await r.json();
-        for (const card of (d.data || [])) {
-          if (!seen.has(card.id)) {
-            seen.add(card.id);
-            allResults.push(card);
-          }
-        }
-        // If we got results on first try, no need to try other variants
-        if (allResults.length > 0) break;
-      } catch { continue; }
-    }
-
-    // Sort: oldest sets first so vintage cards appear before modern reprints
-    // This matches what Gemini is identifying (XY era cards show before S&V)
-    allResults.sort((a, b) => {
-      const dateA = a.set?.releaseDate || '';
-      const dateB = b.set?.releaseDate || '';
-      return dateA.localeCompare(dateB);
+    const params = new URLSearchParams({
+      q: `name:"${cleanName}"`,
+      orderBy: 'set.releaseDate',
+      pageSize: '50',
+      select: 'id,name,number,set,images,rarity,supertype,subtypes'
     });
 
-    return allResults;
+    const response = await fetch(`${BASE}/cards?${params}`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (!response.ok) throw new Error(`TCG DB error ${response.status}`);
+
+    const data = await response.json();
+    return data.data || [];
   }
 
-  // Search using Gemini's search hint
+  // Search with a hint string for more specific results
   async function searchWithHint(name, hint) {
     try {
-      // If hint contains extra info (set name etc), try searching with it first
-      if (hint && hint.trim() !== name.trim()) {
-        const hintResults = await searchCard(hint);
-        if (hintResults.length) return hintResults;
+      // Try hint search first
+      if (hint && hint !== name) {
+        const hintWords = hint.replace(name, '').trim().split(' ').filter(w => w.length > 2);
+        if (hintWords.length) {
+          const results = await searchCard(name);
+          // Filter by hint words matching set name
+          const filtered = results.filter(card => {
+            const setName = (card.set?.name || '').toLowerCase();
+            return hintWords.some(w => setName.includes(w.toLowerCase()));
+          });
+          if (filtered.length) return filtered;
+        }
       }
       return await searchCard(name);
     } catch {
@@ -69,7 +49,7 @@ const TCGDB = (() => {
     }
   }
 
-  // Format card for display
+  // Format card for display in picker
   function formatCard(card) {
     return {
       id: card.id,
@@ -80,9 +60,10 @@ const TCGDB = (() => {
       rarity: card.rarity || '',
       image: card.images?.small || '',
       imageLarge: card.images?.large || '',
+      supertype: card.supertype || '',
+      subtypes: card.subtypes || [],
+      // Full display label
       label: `${card.set?.name || ''} ${card.number || ''}`,
-      tcgplayerId: card.tcgplayer?.productId || null,
-      tcgplayerUrl: card.tcgplayer?.url || '',
     };
   }
 
