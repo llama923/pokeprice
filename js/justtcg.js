@@ -1,140 +1,189 @@
-// justtcg.js — JustTCG API using tcgplayerId for exact condition-based pricing
+// justtcg.js — JustTCG API, correctly implemented per official docs
 
 const JustTCG = (() => {
   const BASE_URL = 'https://poke-price-proxy.c59374758.workers.dev/v1';
+
+  // Condition full names as required by the API
+  const CONDITION_LABEL = {
+    'NM':  'Near Mint',
+    'LP':  'Lightly Played',
+    'MP':  'Moderately Played',
+    'HP':  'Heavily Played',
+    'DMG': 'Damaged'
+  };
+
+  // Map pokemon-tcg.io set names to JustTCG set IDs
+  // JustTCG set IDs follow pattern: set-name-game (lowercased, spaces -> hyphens)
+  // We can get exact set IDs from the /sets endpoint, but the search q param
+  // works without a set filter — we match by number instead
+  const SET_NAME_TO_JUSTTCG = {
+    'XY':                   'xy-base-set-pokemon',
+    'Flashfire':            'xy-flashfire-pokemon',
+    'Furious Fists':        'xy-furious-fists-pokemon',
+    'Phantom Forces':       'xy-phantom-forces-pokemon',
+    'Primal Clash':         'xy-primal-clash-pokemon',
+    'Roaring Skies':        'xy-roaring-skies-pokemon',
+    'Ancient Origins':      'xy-ancient-origins-pokemon',
+    'BREAKthrough':         'xy-breakthrough-pokemon',
+    'BREAKpoint':           'xy-breakpoint-pokemon',
+    'Fates Collide':        'xy-fates-collide-pokemon',
+    'Steam Siege':          'xy-steam-siege-pokemon',
+    'Evolutions':           'xy-evolutions-pokemon',
+    'Sun & Moon':           'sm-base-set-pokemon',
+    'Guardians Rising':     'sm-guardians-rising-pokemon',
+    'Burning Shadows':      'sm-burning-shadows-pokemon',
+    'Crimson Invasion':     'sm-crimson-invasion-pokemon',
+    'Ultra Prism':          'sm-ultra-prism-pokemon',
+    'Forbidden Light':      'sm-forbidden-light-pokemon',
+    'Celestial Storm':      'sm-celestial-storm-pokemon',
+    'Lost Thunder':         'sm-lost-thunder-pokemon',
+    'Team Up':              'sm-team-up-pokemon',
+    'Unbroken Bonds':       'sm-unbroken-bonds-pokemon',
+    'Unified Minds':        'sm-unified-minds-pokemon',
+    'Cosmic Eclipse':       'sm-cosmic-eclipse-pokemon',
+    'Sword & Shield':       'swsh01-sword-shield-base-set-pokemon',
+    'Rebel Clash':          'swsh02-rebel-clash-pokemon',
+    'Darkness Ablaze':      'swsh03-darkness-ablaze-pokemon',
+    'Vivid Voltage':        'swsh04-vivid-voltage-pokemon',
+    'Battle Styles':        'swsh05-battle-styles-pokemon',
+    'Chilling Reign':       'swsh06-chilling-reign-pokemon',
+    'Evolving Skies':       'swsh07-evolving-skies-pokemon',
+    'Fusion Strike':        'swsh08-fusion-strike-pokemon',
+    'Brilliant Stars':      'swsh09-brilliant-stars-pokemon',
+    'Astral Radiance':      'swsh10-astral-radiance-pokemon',
+    'Lost Origin':          'swsh11-lost-origin-pokemon',
+    'Silver Tempest':       'swsh12-silver-tempest-pokemon',
+    'Crown Zenith':         'swsh-crown-zenith-pokemon',
+    'Scarlet & Violet':     'sv01-scarlet-violet-base-set-pokemon',
+    'Paldea Evolved':       'sv02-paldea-evolved-pokemon',
+    'Obsidian Flames':      'sv03-obsidian-flames-pokemon',
+    'Paradox Rift':         'sv04-paradox-rift-pokemon',
+    'Temporal Forces':      'sv05-temporal-forces-pokemon',
+    'Twilight Masquerade':  'sv06-twilight-masquerade-pokemon',
+    'Stellar Crown':        'sv07-stellar-crown-pokemon',
+    'Surging Sparks':       'sv08-surging-sparks-pokemon',
+    'Journey Together':     'sv09-journey-together-pokemon',
+    'Destined Rivals':      'sv10-destined-rivals-pokemon',
+    'Base Set':             'base-set-pokemon',
+    'Jungle':               'jungle-pokemon',
+    'Fossil':               'fossil-pokemon',
+    'Team Rocket':          'team-rocket-pokemon',
+    'Gym Heroes':           'gym-heroes-pokemon',
+    'Gym Challenge':        'gym-challenge-pokemon',
+    'Neo Genesis':          'neo-genesis-pokemon',
+    'Neo Discovery':        'neo-discovery-pokemon',
+    'Neo Revelation':       'neo-revelation-pokemon',
+    'Neo Destiny':          'neo-destiny-pokemon',
+    'Hidden Fates':         'hidden-fates-pokemon',
+    'Shining Fates':        'shining-fates-pokemon',
+    'Dragon Majesty':       'dragon-majesty-pokemon',
+    'Generations':          'generations-pokemon',
+    'Celebrations':         'celebrations-pokemon',
+  };
+
+  function getSetId(setName) {
+    if (!setName) return null;
+    if (SET_NAME_TO_JUSTTCG[setName]) return SET_NAME_TO_JUSTTCG[setName];
+    // Try case-insensitive
+    const lower = setName.toLowerCase();
+    for (const [key, val] of Object.entries(SET_NAME_TO_JUSTTCG)) {
+      if (key.toLowerCase() === lower) return val;
+    }
+    return null;
+  }
 
   async function getPrice(cardName, condition, setInfo = '', tcgplayerId = null) {
     const apiKey = Settings.get('justTCG');
     if (!apiKey) throw new Error('JustTCG API key not set.');
 
-    // If we have a tcgplayerId, use it for a direct exact lookup
-    if (tcgplayerId) {
-      return await getPriceById(tcgplayerId, condition, cardName);
-    }
-
-    // Fallback: search by name
-    return await getPriceByName(cardName, condition, setInfo);
-  }
-
-  async function getPriceById(tcgplayerId, condition, cardName) {
-    const apiKey = Settings.get('justTCG');
-
-    const params = new URLSearchParams({
-      tcgplayerId: String(tcgplayerId),
-      game: 'pokemon',
-      conditions: condition,
-    });
-
-    const response = await fetch(`${BASE_URL}/cards?${params}`, {
-      headers: {
-        'X-API-Key': apiKey,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(`JustTCG error ${response.status}: ${err?.message || response.statusText}`);
-    }
-
-    const data = await response.json();
-    const cards = data?.data || [];
-
-    if (!cards.length) {
-      return { price: null, url: null, source: 'Not found' };
-    }
-
-    const card = cards[0];
-    const price = extractPrice(card, condition);
-    const url = card.url || buildTCGPlayerUrl(cardName);
-
-    return {
-      price,
-      url,
-      source: price ? 'TCGPlayer via JustTCG' : 'Not found',
-      productName: card.name || cardName
-    };
-  }
-
-  async function getPriceByName(cardName, condition, setInfo) {
-    const apiKey = Settings.get('justTCG');
-
-    // Clean HP info from name
+    const conditionLabel = CONDITION_LABEL[condition] || 'Near Mint';
     const cleanName = cardName.replace(/\s*\(\d+\s*HP\)/gi, '').trim();
 
+    // Parse set name and number from setInfo e.g. "Furious Fists 108/111"
+    const numberMatch = setInfo.match(/(\d+)(?:\/\d+)?$/);
+    const cardNumber = numberMatch ? numberMatch[1].replace(/^0+/, '') : null;
+    const setNameRaw = setInfo.replace(/\s*\d+\/?\d*$/, '').trim();
+    const setId = getSetId(setNameRaw);
+
+    // Build search params
     const params = new URLSearchParams({
       q: cleanName,
       game: 'pokemon',
-      conditions: condition,
-      limit: '5'
+      limit: '20',
+      conditions: conditionLabel,
     });
 
-    const response = await fetch(`${BASE_URL}/cards?${params}`, {
-      headers: {
-        'X-API-Key': apiKey,
-        'Content-Type': 'application/json'
-      }
-    });
+    // Add set filter if we have a matching set ID
+    if (setId) params.set('set', setId);
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(`JustTCG error ${response.status}: ${err?.message || response.statusText}`);
-    }
+    let cards = await fetchCards(params, apiKey);
 
-    const data = await response.json();
-    const cards = data?.data || [];
-
-    if (!cards.length) {
-      return { price: null, url: null, source: 'Not found' };
-    }
-
-    // Try to find best match by set info
-    let card = cards[0];
-    if (setInfo) {
-      const numberMatch = setInfo.match(/(\d+)\//);
-      const cardNumber = numberMatch ? numberMatch[1].replace(/^0+/, '') : null;
-      const setName = setInfo.replace(/\s*\d+\/\d+$/, '').trim().toLowerCase();
-
-      const betterMatch = cards.find(c => {
-        const cSetName = (c.set_name || '').toLowerCase();
-        const cNumber = (c.number || '').replace(/^0+/, '').split('/')[0];
-        return (cardNumber && cNumber === cardNumber) ||
-               cSetName.includes(setName) || setName.includes(cSetName);
+    // Fallback: search without set filter
+    if (!cards.length && setId) {
+      const fallback = new URLSearchParams({
+        q: cleanName,
+        game: 'pokemon',
+        limit: '20',
+        conditions: conditionLabel,
       });
-      if (betterMatch) card = betterMatch;
+      cards = await fetchCards(fallback, apiKey);
     }
 
-    const price = extractPrice(card, condition);
+    if (!cards.length) return { price: null, url: null, source: 'Not found' };
+
+    // Pick best match by card number
+    let card = cards[0];
+    if (cardNumber) {
+      const numMatch = cards.find(c => {
+        const cNum = (c.number || '').replace(/^0+/, '').split('/')[0];
+        return cNum === cardNumber;
+      });
+      if (numMatch) card = numMatch;
+    }
+
+    const price = extractPrice(card, conditionLabel);
     return {
       price,
-      url: card.url || buildTCGPlayerUrl(cardName),
+      url: card.url || buildTCGPlayerUrl(cleanName),
       source: price ? 'TCGPlayer via JustTCG' : 'Not found',
-      productName: card.name || cardName
+      productName: card.name || cleanName
     };
   }
 
-  function extractPrice(card, condition) {
+  async function fetchCards(params, apiKey) {
+    try {
+      const r = await fetch(`${BASE_URL}/cards?${params}`, {
+        headers: {
+          'x-api-key': apiKey,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!r.ok) return [];
+      const d = await r.json();
+      return d?.data || [];
+    } catch { return []; }
+  }
+
+  function extractPrice(card, conditionLabel) {
     const variants = card?.variants || [];
     if (!variants.length) return null;
 
-    const conditionLabel = {
-      'NM':  'Near Mint',
-      'LP':  'Lightly Played',
-      'MP':  'Moderately Played',
-      'HP':  'Heavily Played',
-      'DMG': 'Damaged'
-    }[condition] || 'Near Mint';
-
+    // Find variant matching our condition
     const matches = variants.filter(v => v.condition === conditionLabel);
-
     if (matches.length) {
+      // Prefer Unlimited/Normal over 1st Edition (more common/standard)
       const preferred = matches.find(v =>
-        v.printing && (v.printing.includes('Unlimited') || v.printing.includes('Normal') || v.printing.includes('Regular'))
+        v.printing && (
+          v.printing.includes('Unlimited') ||
+          v.printing === 'Normal' ||
+          v.printing === 'Holofoil' ||
+          v.printing === 'Reverse Holofoil'
+        )
       ) || matches[0];
       return preferred.price ?? null;
     }
 
-    // Fallback: first variant
+    // Fallback: first variant regardless of condition
     return variants[0]?.price ?? null;
   }
 
@@ -157,9 +206,7 @@ const JustTCG = (() => {
       } catch (err) {
         results.push({ ...card, price: null, url: null, source: 'Error', error: err.message });
       }
-      if (i < cards.length - 1) {
-        await new Promise(r => setTimeout(r, 250));
-      }
+      if (i < cards.length - 1) await new Promise(r => setTimeout(r, 250));
     }
     return results;
   }
