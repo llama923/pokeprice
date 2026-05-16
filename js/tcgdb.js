@@ -3,65 +3,47 @@
 const TCGDB = (() => {
   const BASE = 'https://api.pokemontcg.io/v2';
 
-  // Search by exact name — tries both capitalizations (EX vs ex, GX vs gx, etc.)
   async function searchCard(name) {
     const cleanName = name.trim();
     if (!cleanName) return [];
+    const params = new URLSearchParams({
+      q: `name:"${cleanName}"`,
+      orderBy: '-set.releaseDate',
+      pageSize: '50',
+      select: 'id,name,number,set,images,rarity,supertype,subtypes'
+    });
+    const response = await fetch(`${BASE}/cards?${params}`);
+    if (!response.ok) throw new Error(`TCG DB error ${response.status}`);
+    const data = await response.json();
+    return data.data || [];
+  }
 
-    // Build alternate capitalizations to try
-    const variants = new Set([
-      cleanName,
-      cleanName.replace(/ EX$/i, ' EX'),   // ensure uppercase EX
-      cleanName.replace(/ EX$/i, ' ex'),    // ensure lowercase ex
-      cleanName.replace(/ GX$/i, ' GX'),
-      cleanName.replace(/ GX$/i, ' gx'),
-      cleanName.replace(/ V$/i, ' V'),
-      cleanName.replace(/ VMAX$/i, ' VMAX'),
-    ]);
-
-    // Try each variant, collect all results, deduplicate by id
-    const seen = new Set();
-    const allResults = [];
-
-    for (const variant of variants) {
+  async function searchByHint(hint) {
+    if (!hint?.trim()) return [];
+    const words = hint.trim().split(/\s+/);
+    const queries = [hint.trim(), words.slice(0,3).join(' '), words.slice(0,2).join(' ')];
+    for (const q of queries) {
       try {
         const params = new URLSearchParams({
-          q: `name:"${variant}"`,
-          pageSize: '50',
+          q: `name:"${q}"`,
+          orderBy: '-set.releaseDate',
+          pageSize: '30',
           select: 'id,name,number,set,images,rarity,supertype,subtypes'
         });
         const r = await fetch(`${BASE}/cards?${params}`);
         if (!r.ok) continue;
         const d = await r.json();
-        for (const card of (d.data || [])) {
-          if (!seen.has(card.id)) {
-            seen.add(card.id);
-            allResults.push(card);
-          }
-        }
-        // If we got results on first try, no need to try other variants
-        if (allResults.length > 0) break;
+        if (d.data?.length) return d.data;
       } catch { continue; }
     }
-
-    // Sort: oldest sets first so vintage cards appear before modern reprints
-    // This matches what Gemini is identifying (XY era cards show before S&V)
-    allResults.sort((a, b) => {
-      const dateA = a.set?.releaseDate || '';
-      const dateB = b.set?.releaseDate || '';
-      return dateA.localeCompare(dateB);
-    });
-
-    return allResults;
+    return [];
   }
 
-  // Search using Gemini's search hint
   async function searchWithHint(name, hint) {
     try {
-      // If hint contains extra info (set name etc), try searching with it first
-      if (hint && hint.trim() !== name.trim()) {
-        const hintResults = await searchCard(hint);
-        if (hintResults.length) return hintResults;
+      if (hint && hint !== name) {
+        const results = await searchByHint(hint);
+        if (results.length) return results;
       }
       return await searchCard(name);
     } catch {
@@ -69,7 +51,6 @@ const TCGDB = (() => {
     }
   }
 
-  // Format card for display
   function formatCard(card) {
     return {
       id: card.id,
@@ -84,5 +65,5 @@ const TCGDB = (() => {
     };
   }
 
-  return { searchCard, searchWithHint, formatCard };
+  return { searchCard, searchByHint, searchWithHint, formatCard };
 })();
