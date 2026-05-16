@@ -169,9 +169,23 @@ const JustTCG = (() => {
     const apiKey = Settings.get('justTCG');
     if (!apiKey) return [];
     try {
-      const params = new URLSearchParams({ q: query, game: 'pokemon', limit: '20' });
+      const params = new URLSearchParams({ q: query, game: 'pokemon', limit: '30' });
       const cards = await fetchCards(params, apiKey);
-      return cards.map(card => ({
+
+      // Filter out products, tins, bundles — only keep actual cards
+      // Real cards have a valid number like "76/122" or "115/114"
+      const realCards = cards.filter(card => {
+        if (!card.number) return false;
+        // Skip if number is N/A or doesn't contain a digit
+        if (card.number === 'N/A' || !/\d/.test(card.number)) return false;
+        // Skip obvious products/bundles by name keywords
+        const nameLower = (card.name || '').toLowerCase();
+        const skipKeywords = ['tin', 'collection', 'bundle', 'box', 'deck', 'blister', 'pack', 'promo'];
+        if (skipKeywords.some(k => nameLower.includes(k))) return false;
+        return true;
+      });
+
+      return realCards.map(card => ({
         id: card.id,
         name: card.name,
         number: card.number,
@@ -179,12 +193,10 @@ const JustTCG = (() => {
         setId: card.set || '',
         rarity: card.rarity || '',
         tcgplayerId: card.tcgplayerId || null,
-        // TCGPlayer CDN image URL
         image: card.tcgplayerId
           ? `https://product-images.tcgplayer.com/fit-in/284x284/${card.tcgplayerId}.jpg`
           : '',
         label: `${card.set_name || ''} ${card.number || ''}`,
-        // Store full card for price lookup
         _raw: card
       }));
     } catch { return []; }

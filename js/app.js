@@ -1,3 +1,6 @@
+// Global HTML escape function used by picker
+function esc(str){return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
 // app.js — Visual card verification, full photo shown per card
 
 const App = (() => {
