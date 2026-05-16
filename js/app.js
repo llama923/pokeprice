@@ -135,7 +135,7 @@ const App = (() => {
   // ─── LOAD TCG MATCHES ───
   async function loadAllMatches() {
     for(const card of identifiedCards){
-      await JustTCG.searchForPicker(card.name).then(results=>{ card.allMatches=results; if(results.length&&!card.pickedCard)card.pickedCard=results[0]; updateCardRow(card.rowId); card.loaded=true; });
+      await TCGDB.searchCard(card.name).then(r=>{ const results=r.map(TCGDB.formatCard); card.allMatches=results; if(results.length&&!card.pickedCard)card.pickedCard=results[0]; updateCardRow(card.rowId); card.loaded=true; });
       await new Promise(r=>setTimeout(r,120));
     }
     log('All TCGPlayer matches loaded','ok');
@@ -143,8 +143,8 @@ const App = (() => {
 
   async function loadCardMatches(card) {
     try{
-      const results=await JustTCG.searchForPicker(card.name);
-      card.allMatches=results;
+      const results=await TCGDB.searchWithHint(card.name, card.search_hint);
+      card.allMatches=results.map(TCGDB.formatCard);
       if(card.allMatches.length && !card.pickedCard) card.pickedCard=card.allMatches[0];
     }catch{
       card.allMatches=[];
@@ -279,8 +279,8 @@ const App = (() => {
     } else {
       grid.innerHTML='<div class="picker-loading">Loading candidates...</div>';
       try{
-        const results=await JustTCG.searchForPicker(card.name);
-        card.allMatches=results;
+        const results=await TCGDB.searchWithHint(card.name, card.search_hint);
+        card.allMatches=results.map(TCGDB.formatCard);
         renderPickerCards(card.allMatches, grid);
       }catch(err){
         grid.innerHTML=`<div class="picker-loading" style="color:var(--error)">${esc(err.message)}</div>`;
@@ -294,8 +294,8 @@ const App = (() => {
         const q=$('pickerSearch').value.trim(); if(!q)return;
         grid.innerHTML='<div class="picker-loading">Searching...</div>';
         try{
-          const r=await JustTCG.searchForPicker(q);
-          renderPickerCards(r, grid);
+          const r=await TCGDB.searchCard(q);
+          renderPickerCards(r.map(TCGDB.formatCard), grid);
         }catch(err){
           grid.innerHTML=`<div class="picker-loading" style="color:var(--error)">${esc(err.message)}</div>`;
         }
@@ -348,7 +348,7 @@ const App = (() => {
       row.className='verify-row'; row.dataset.rowid=card.rowId;
       row.innerHTML=buildRowHTML(card); bindRowEvents(row,card);
       cardsList.appendChild(row);
-      JustTCG.searchForPicker(card.name).then(results=>{ card.allMatches=results; if(results.length&&!card.pickedCard)card.pickedCard=results[0]; updateCardRow(card.rowId); card.loaded=true; });
+      TCGDB.searchCard(card.name).then(r=>{ const results=r.map(TCGDB.formatCard); card.allMatches=results; if(results.length&&!card.pickedCard)card.pickedCard=results[0]; updateCardRow(card.rowId); card.loaded=true; });
       addCardModal.classList.remove('open');
       if(stepReview.hasAttribute('hidden'))showReviewStep();
       toast(`Added: ${name}`,'ok');
