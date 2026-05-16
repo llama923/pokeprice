@@ -164,6 +164,32 @@ const JustTCG = (() => {
     } catch { return []; }
   }
 
+  // Search for picker — returns formatted card objects with images
+  async function searchForPicker(query) {
+    const apiKey = Settings.get('justTCG');
+    if (!apiKey) return [];
+    try {
+      const params = new URLSearchParams({ q: query, game: 'pokemon', limit: '20' });
+      const cards = await fetchCards(params, apiKey);
+      return cards.map(card => ({
+        id: card.id,
+        name: card.name,
+        number: card.number,
+        setName: card.set_name || '',
+        setId: card.set || '',
+        rarity: card.rarity || '',
+        tcgplayerId: card.tcgplayerId || null,
+        // TCGPlayer CDN image URL
+        image: card.tcgplayerId
+          ? `https://product-images.tcgplayer.com/fit-in/284x284/${card.tcgplayerId}.jpg`
+          : '',
+        label: `${card.set_name || ''} ${card.number || ''}`,
+        // Store full card for price lookup
+        _raw: card
+      }));
+    } catch { return []; }
+  }
+
   function extractPrice(card, conditionLabel) {
     const variants = card?.variants || [];
     if (!variants.length) return null;
@@ -211,5 +237,5 @@ const JustTCG = (() => {
     return results;
   }
 
-  return { getPrice, getPriceBatch };
+  return { getPrice, getPriceBatch, searchForPicker };
 })();
