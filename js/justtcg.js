@@ -105,16 +105,16 @@ const JustTCG = (() => {
     const setNameRaw = setInfo.replace(/\s*\d+\/?\d*$/, '').trim();
     const setId = getSetId(setNameRaw);
 
-    // Build search params
+    // Build search params — match exact console test that worked
     const params = new URLSearchParams({
       q: cleanName,
       game: 'pokemon',
-      limit: '20',
-      conditions: conditionLabel,
+      limit: '5',
     });
-
-    // Add set filter if we have a matching set ID
+    if (conditionLabel) params.set('conditions', conditionLabel);
     if (setId) params.set('set', setId);
+    
+    console.log('JustTCG search:', params.toString());
 
     let cards = await fetchCards(params, apiKey);
 
