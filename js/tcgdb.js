@@ -5,9 +5,9 @@ const TCGDB = (() => {
 
   // Search for all versions of a card by name
   async function searchCard(name) {
+    // Clean the name — remove art style hints
     const cleanName = name
       .replace(/\s*(full art|secret rare|holo|reverse holo|rainbow rare|alternate art)\s*/gi, '')
-      .replace(/\s*\(\d+\s*HP\)/gi, '')
       .trim();
 
     const params = new URLSearchParams({
@@ -17,8 +17,12 @@ const TCGDB = (() => {
       select: 'id,name,number,set,images,rarity,supertype,subtypes'
     });
 
-    const response = await fetch(`${BASE}/cards?${params}`);
+    const response = await fetch(`${BASE}/cards?${params}`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
     if (!response.ok) throw new Error(`TCG DB error ${response.status}`);
+
     const data = await response.json();
     return data.data || [];
   }
@@ -26,10 +30,12 @@ const TCGDB = (() => {
   // Search with a hint string for more specific results
   async function searchWithHint(name, hint) {
     try {
+      // Try hint search first
       if (hint && hint !== name) {
         const hintWords = hint.replace(name, '').trim().split(' ').filter(w => w.length > 2);
         if (hintWords.length) {
           const results = await searchCard(name);
+          // Filter by hint words matching set name
           const filtered = results.filter(card => {
             const setName = (card.set?.name || '').toLowerCase();
             return hintWords.some(w => setName.includes(w.toLowerCase()));
@@ -43,6 +49,7 @@ const TCGDB = (() => {
     }
   }
 
+  // Format card for display in picker
   function formatCard(card) {
     return {
       id: card.id,
@@ -53,6 +60,9 @@ const TCGDB = (() => {
       rarity: card.rarity || '',
       image: card.images?.small || '',
       imageLarge: card.images?.large || '',
+      supertype: card.supertype || '',
+      subtypes: card.subtypes || [],
+      // Full display label
       label: `${card.set?.name || ''} ${card.number || ''}`,
     };
   }
