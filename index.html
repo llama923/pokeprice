@@ -96,11 +96,11 @@
       </button>
     </section>
 
-    <!-- STEP 2: Review Cards -->
+    <!-- STEP 2: Verify Cards -->
     <section class="step-card" id="stepReview" hidden>
       <div class="step-label">Step 02</div>
-      <h2 class="step-title">Review &amp; Set Conditions</h2>
-      <p class="step-desc">Gemini identified the cards below. Assign a condition to each, then fetch prices.</p>
+      <h2 class="step-title">Verify Cards</h2>
+      <p class="step-desc">Your photo crop is on the left, Gemini's TCGPlayer match is on the right. Click any TCGPlayer card image to change the version.</p>
 
       <div class="toolbar">
         <div class="toolbar-left">
@@ -119,19 +119,7 @@
         </div>
       </div>
 
-      <div class="cards-table-wrap">
-        <table class="cards-table" id="cardsTable">
-          <thead>
-            <tr>
-              <th>Card Name</th>
-              <th>Set / Number</th>
-              <th>Condition</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="cardsTableBody"></tbody>
-        </table>
-      </div>
+      <div class="cards-list" id="cardsList"></div>
 
       <button class="btn-primary btn-full" id="btnFetchPrices">
         <span class="btn-text">Fetch Prices via JustTCG</span>
@@ -228,22 +216,11 @@
         <h2 id="pickerTitle">Pick version</h2>
         <button class="modal-close" id="btnClosePicker">✕</button>
       </div>
-      <div class="picker-body">
-        <!-- Left: photo with highlight -->
-        <div class="picker-photo-panel">
-          <div class="picker-photo-wrap">
-            <img id="pickerPhoto" src="" alt="Card photo" />
-            <div id="pickerHighlight" class="picker-highlight"></div>
-          </div>
-          <p class="picker-photo-hint">Your photo — find this card on the right</p>
+      <div class="picker-body picker-body-simple">
+        <div class="picker-search-wrap">
+          <input type="text" id="pickerSearch" placeholder="Search card name..." />
         </div>
-        <!-- Right: TCG DB results -->
-        <div class="picker-results-panel">
-          <div class="picker-search-wrap">
-            <input type="text" id="pickerSearch" placeholder="Search card name..." />
-          </div>
-          <div class="picker-grid" id="pickerGrid"></div>
-        </div>
+        <div class="picker-grid" id="pickerGrid"></div>
       </div>
     </div>
   </div>
@@ -252,10 +229,10 @@
   <div class="toast" id="toast"></div>
 
   <script src="js/settings.js"></script>
-  <script src="js/gemini.js?v=23"></script>
-  <script src="js/tcgdb.js?v=23"></script>
-  <script src="js/justtcg.js?v=23"></script>
-  <script src="js/sheets.js?v=23"></script>
-  <script src="js/app.js?v=23"></script>
+  <script src="js/gemini.js?v=24"></script>
+  <script src="js/tcgdb.js?v=24"></script>
+  <script src="js/justtcg.js?v=24"></script>
+  <script src="js/sheets.js?v=24"></script>
+  <script src="js/app.js?v=24"></script>
 </body>
 </html>
