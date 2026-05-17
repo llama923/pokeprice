@@ -118,6 +118,7 @@ const App = (() => {
         log(`  → Error: ${err.message}`,'error');
         toast(`Image ${i+1} failed: ${err.message}`,'err');
       }
+      if(i < files.length-1) await new Promise(r=>setTimeout(r,2000));
     }
 
     setButtonLoading(btnAnalyze,false);
