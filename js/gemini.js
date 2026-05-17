@@ -18,6 +18,14 @@ ABSOLUTE RULES:
 - The collector number is a secondary confirmation. If blurry or unreadable, rely on visual ID alone.
 - NEVER invent a card. If you are not confident, set confidence to "low" — do not guess.
 - NEVER default to the most common version of a card. Each card must be identified by what is actually visible.
+- Do your best even if cards are in plastic sleeves, binder pages, at an angle, or have glare. Identify what you can see.
+- If a card is partially visible or obscured by glare, still attempt identification with confidence "low".
+
+STEP 0 — DETECT LANGUAGE:
+- Look at the card text. Is it in English, Japanese, Korean, Chinese, or another language?
+- If NON-ENGLISH: set "language" to the detected language (e.g. "Japanese", "Korean") and find the correct non-English TCGPlayer listing for that card.
+- Japanese cards on TCGPlayer use Japanese set names (e.g. "SV: Space-Time Smackdown") and have different card numbers.
+- If ENGLISH: set "language" to "English".
 
 FOR EACH CARD, follow these steps:
 
@@ -40,20 +48,23 @@ FOR EACH CARD, follow these steps:
 - Scarlet & Violet only: 2 black stars = Double Rare, 2 silver = Ultra Rare, 1 gold = IR, 2 gold = SIR, 3 gold = Hyper Rare
 
 5. VINTAGE (1999-2003 WOTC only):
-- 1st Edition stamp = small oval stamp below left of artwork
-- Shadowless = no drop shadow on right side of art box (Base Set only)
-- Unlimited = drop shadow present
+- 1st Edition stamp = small oval stamp below left of artwork. Present on Base Set, Jungle, Fossil, Team Rocket, Gym Heroes, Gym Challenge, Neo Genesis, Neo Discovery, Neo Revelation, Neo Destiny.
+- Shadowless = no drop shadow on right side of art box. Base Set only. Very thin card border.
+- Unlimited = drop shadow visible on right of art box.
+- For vintage cards WITHOUT EX/GX/V suffix: identify by the Pokémon name + set (e.g. "Charizard" Base Set, "Blastoise" Base Set 2, "Mewtwo" Neo Genesis). These are just as valid as modern cards.
+- Vintage holos have a starfield or diagonal pattern in the artwork area.
 
 6. NUMBER: Read the collector number from the bottom of the card. If unreadable, use visual ID to determine it.
 
-If a card is a card back or completely unidentifiable, skip it entirely.
+If a card is a card back or completely unidentifiable even after careful examination, skip it entirely.
 
 Return ONLY a valid JSON array, no markdown, no backticks, no explanation:
 [
   {
     "name": "Official TCGPlayer card name",
     "art_style": "Full Art / Secret Rare / Holo Rare / Reverse Holo / Rainbow Rare / Alternate Art / Illustration Rare / Special Illustration Rare / Hyper Rare / 1st Edition / Shadowless / Standard",
-    "search_hint": "Best search string to find this exact card on TCGPlayer (name + set name)",
+    "language": "English / Japanese / Korean / Chinese / Other",
+    "search_hint": "Best search string to find this exact card on TCGPlayer (name + set name, use Japanese set name if Japanese card)",
     "confidence": "high / medium / low"
   }
 ]`;
