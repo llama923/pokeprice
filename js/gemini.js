@@ -23,8 +23,8 @@ ABSOLUTE RULES:
 
 STEP 0 — DETECT LANGUAGE:
 - Look at the card text. Is it in English, Japanese, Korean, Chinese, or another language?
-- If NON-ENGLISH: set "language" to the detected language (e.g. "Japanese", "Korean") and find the correct non-English TCGPlayer listing for that card.
-- Japanese cards on TCGPlayer use Japanese set names (e.g. "SV: Space-Time Smackdown") and have different card numbers.
+- If JAPANESE: set "language" to "Japanese". The card name in "name" field should be the ENGLISH name of the Pokémon (e.g. "Charizard" not "Charizard (Japanese)"). Set search_hint to the Japanese TCGPlayer set name, e.g. "Charizard SV: Space-Time Smackdown" or "Pikachu Japanese Promo". Do NOT append "(Japanese)" to the name.
+- If KOREAN/OTHER: same approach — use English Pokémon name, note the language in search_hint.
 - If ENGLISH: set "language" to "English".
 
 FOR EACH CARD, follow these steps:
@@ -51,8 +51,10 @@ FOR EACH CARD, follow these steps:
 - 1st Edition stamp = small oval stamp below left of artwork. Present on Base Set, Jungle, Fossil, Team Rocket, Gym Heroes, Gym Challenge, Neo Genesis, Neo Discovery, Neo Revelation, Neo Destiny.
 - Shadowless = no drop shadow on right side of art box. Base Set only. Very thin card border.
 - Unlimited = drop shadow visible on right of art box.
-- For vintage cards WITHOUT EX/GX/V suffix: identify by the Pokémon name + set (e.g. "Charizard" Base Set, "Blastoise" Base Set 2, "Mewtwo" Neo Genesis). These are just as valid as modern cards.
-- Vintage holos have a starfield or diagonal pattern in the artwork area.
+- CRITICAL: Most vintage cards have NO suffix. They are just "Charizard", "Blastoise", "Pikachu" etc. Do NOT add "EX" to a vintage card name unless you can clearly read "ex" printed on the card itself.
+- Vintage EX cards (e-Reader era 2003-2004) DO exist but are very rare — they say "ex" in lowercase on the card. Do not confuse these with modern EX cards.
+- Vintage holos have a starfield or diagonal line pattern in the artwork area.
+- Identify vintage cards by: Pokémon name + set name (e.g. "Charizard" Base Set, "Mewtwo" Neo Genesis, "Pikachu" Jungle). No suffix needed.
 
 6. NUMBER: Read the collector number from the bottom of the card. If unreadable, use visual ID to determine it.
 
