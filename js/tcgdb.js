@@ -2,48 +2,64 @@
 
 const TCGDB = (() => {
   const BASE = 'https://api.pokemontcg.io/v2';
+  const BASE_JA = 'https://api.pokemontcg.io/v2/ja';
 
-  async function searchCard(name) {
-    const cleanName = name.trim();
+  // Search Japanese cards
+  async function searchCardJapanese(name) {
+    const cleanName = name.trim().replace(/\s*\(\d+\s*HP\)/gi, '');
     if (!cleanName) return [];
+    try {
+      const params = new URLSearchParams({
+        q: `name:"${cleanName}"`,
+        pageSize: '30',
+        select: 'id,name,number,set,images,rarity'
+      });
+      const r = await fetch(`${BASE_JA}/cards?${params}`);
+      if (!r.ok) return [];
+      const d = await r.json();
+      return d.data || [];
+    } catch { return []; }
+  }
+
+  // Search for all versions of a card by name
+  async function searchCard(name) {
+    const cleanName = name
+      .replace(/\s*(full art|secret rare|holo|reverse holo|rainbow rare|alternate art)\s*/gi, '')
+      .replace(/\s*\(\d+\s*HP\)/gi, '')
+      .trim();
+
     const params = new URLSearchParams({
       q: `name:"${cleanName}"`,
-      orderBy: '-set.releaseDate',
+      orderBy: 'set.releaseDate',
       pageSize: '50',
       select: 'id,name,number,set,images,rarity,supertype,subtypes'
     });
+
     const response = await fetch(`${BASE}/cards?${params}`);
     if (!response.ok) throw new Error(`TCG DB error ${response.status}`);
     const data = await response.json();
     return data.data || [];
   }
 
-  async function searchByHint(hint) {
-    if (!hint?.trim()) return [];
-    const words = hint.trim().split(/\s+/);
-    const queries = [hint.trim(), words.slice(0,3).join(' '), words.slice(0,2).join(' ')];
-    for (const q of queries) {
-      try {
-        const params = new URLSearchParams({
-          q: `name:"${q}"`,
-          orderBy: '-set.releaseDate',
-          pageSize: '30',
-          select: 'id,name,number,set,images,rarity,supertype,subtypes'
-        });
-        const r = await fetch(`${BASE}/cards?${params}`);
-        if (!r.ok) continue;
-        const d = await r.json();
-        if (d.data?.length) return d.data;
-      } catch { continue; }
-    }
-    return [];
-  }
-
-  async function searchWithHint(name, hint) {
+  // Search with a hint string for more specific results
+  async function searchWithHint(name, hint, language) {
     try {
+      // If Japanese, search Japanese database
+      if (language === 'Japanese') {
+        const jpResults = await searchCardJapanese(name);
+        if (jpResults.length) return jpResults;
+        // Fallback to English if no Japanese results
+      }
       if (hint && hint !== name) {
-        const results = await searchByHint(hint);
-        if (results.length) return results;
+        const hintWords = hint.replace(name, '').trim().split(' ').filter(w => w.length > 2);
+        if (hintWords.length) {
+          const results = await searchCard(name);
+          const filtered = results.filter(card => {
+            const setName = (card.set?.name || '').toLowerCase();
+            return hintWords.some(w => setName.includes(w.toLowerCase()));
+          });
+          if (filtered.length) return filtered;
+        }
       }
       return await searchCard(name);
     } catch {
@@ -65,5 +81,5 @@ const TCGDB = (() => {
     };
   }
 
-  return { searchCard, searchByHint, searchWithHint, formatCard };
+  return { searchCard, searchCardJapanese, searchWithHint, formatCard };
 })();
