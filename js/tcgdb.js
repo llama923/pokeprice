@@ -15,24 +15,6 @@ const TCGDB = (() => {
       return d.data || [];
     } catch { return []; }
   }
-  const BASE_JA = 'https://api.pokemontcg.io/v2/ja';
-
-  // Search Japanese cards
-  async function searchCardJapanese(name) {
-    const cleanName = name.trim().replace(/\s*\(\d+\s*HP\)/gi, '');
-    if (!cleanName) return [];
-    try {
-      const params = new URLSearchParams({
-        q: `name:"${cleanName}"`,
-        pageSize: '30',
-        select: 'id,name,number,set,images,rarity'
-      });
-      const r = await fetch(`${BASE_JA}/cards?${params}`);
-      if (!r.ok) return [];
-      const d = await r.json();
-      return d.data || [];
-    } catch { return []; }
-  }
 
   // Search for all versions of a card by name
   async function searchCard(name) {
